@@ -1,6 +1,6 @@
 [package]
 name = "cde"
-version = "0.1.0"
+version = "0.0.2"
 authors = ["Dave Huseby <dave@cryptid.tech>"]
 description = "A universal encoding scheme for all cryptographic data"
 documentation = "https://docs.rs/cde"
@@ -14,6 +14,7 @@ edition = "2018"
 [dependencies]
 anyhow = "1.0"
 data-encoding = "2.3"
+log = "0.4"
+stderrlog = "0.5"
 structopt = "0.3"
 thiserror = "1.0"
-vlog = "0.1"

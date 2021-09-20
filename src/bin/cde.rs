@@ -1,24 +1,27 @@
 extern crate structopt;
-#[macro_use]
-extern crate vlog;
 
 use cde::*;
 use anyhow::Result;
+use log::*;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
-use vlog::set_verbosity_level;
 
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "cde",
-    version = "0.1",
+    version = "0.0.2",
     author = "David Huseby <dwh@linuxprogrammer.org>",
     about = "Encode/Decode cryptographic data in CDE format",
 )]
 struct Opt {
+
+    /// silence all output
+    #[structopt(short = "q", long = "quiet")]
+    quiet: bool,
+
     /// verbose output
     #[structopt(long = "verbose", short = "v", parse(from_occurrences))]
     verbosity: usize,
@@ -127,13 +130,18 @@ fn main() -> Result<()> {
     // parse the command line flags
     let opt = Opt::from_args();
 
-    // set the verbosity level
-    set_verbosity_level(opt.verbosity);
-    v3!("cde: verbosity set to: {}", opt.verbosity);
+    // set up logger
+    stderrlog::new()
+        .module(module_path!())
+        .quiet(opt.quiet)
+        .verbosity(opt.verbosity)
+        .init()?;
+    
+    debug!("cde: verbosity set to: {}", opt.verbosity);
 
     match opt.cmd {
         Command::Encode { output, class, sub_class, sub_sub_class, input } => {
-            ve1!("cde: encoding from {} to {}",
+            info!("cde: encoding from {} to {}",
                 reader_name(&input)?.to_string_lossy(),
                 writer_name(&output)?.to_string_lossy());
 
@@ -146,7 +154,7 @@ fn main() -> Result<()> {
 
             // generate a type tag from the command line options
             let tt = TypeTag::new(&class, &sub_class, &sub_sub_class, len as u32);
-            ve1!("{}", tt);
+            debug!("\n{}", tt);
 
             // write the encoded type tag
             w.write_all(tt.encode().as_bytes())?;
@@ -156,7 +164,7 @@ fn main() -> Result<()> {
             w.write_all(enc.encode(&data).as_bytes())?;
         },
         Command::Decode { output, input } => {
-            ve1!("cde: decoding from {} to {}",
+            info!("cde: decoding from {} to {}",
                 reader_name(&input)?.to_string_lossy(),
                 writer_name(&output)?.to_string_lossy());
 
@@ -175,12 +183,12 @@ fn main() -> Result<()> {
             };
 
             let tt = TypeTag::from(tag);
-            ve1!("{}", tt);
+            debug!("\n{}", tt);
 
             w.write_all(&data)?;
         }
         Command::Info { input } => {
-            ve1!("cde: reading info from {}",
+            debug!("cde: reading info from {}",
                 reader_name(&input)?.to_string_lossy());
 
             let mut r = reader(&input)?;
@@ -197,7 +205,7 @@ fn main() -> Result<()> {
             };
 
             let tt = TypeTag::from(tag);
-            ve0!("{}", tt);
+            debug!("\n{}", tt);
         }
     }
 
