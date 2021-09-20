@@ -1,20 +1,6 @@
-[package]
-name = "cde"
-version = "0.1.1"
-authors = ["Dave Huseby <dave@cryptid.tech>"]
-description = "A universal encoding scheme for all cryptographic data"
-documentation = "https://docs.rs/cde"
-repository = "https://github.com/cryptidtech/cde"
-readme = "README.md"
-license = "Apache-2.0"
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-anyhow = "1.0"
-data-encoding = "2.3"
-log = "0.4"
-stderrlog = "0.5"
-structopt = "0.3"
-thiserror = "1.0"
+[workspace]
+members = [
+  "core/cli",
+  "core/lib",
+  "core/codegen"
+]
