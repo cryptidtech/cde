@@ -1,6 +1,6 @@
 extern crate structopt;
 
-use cde::*;
+use cde::{ encoder, TagBuilder };
 use anyhow::Result;
 use log::*;
 use std::ffi::OsString;
@@ -12,7 +12,7 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "cde",
-    version = "0.1.1",
+    version = "0.2.0",
     author = "David Huseby <dwh@linuxprogrammer.org>",
     about = "Encode/Decode cryptographic data in CDE format",
 )]
@@ -41,17 +41,9 @@ enum Command {
         #[structopt(short = "o", parse(from_os_str))]
         output: Option<PathBuf>,
 
-        /// The class of the encoded object
-        #[structopt(short="c", long = "class")]
-        class: Class,
-
-        /// The sub-class of the encoded object
-        #[structopt(short="s", long = "sub-class")]
-        sub_class: SubClass,
-
-        /// The sub-sub-class of the encoded object
-        #[structopt(short="v", long = "sub-sub-class", default_value = "0")]
-        sub_sub_class: SubSubClass,
+        /// The type string for the encoded object
+        #[structopt(short = "t", long = "tt")]
+        tt: String,
 
         /// Path of file to encode or '-' if data passed through stdin.
         #[structopt(name = "FILE", parse(from_os_str))]
@@ -71,8 +63,16 @@ enum Command {
     },
 
     #[structopt(name = "info")]
-    /// Display the type tag information for an encoded object
+    /// Display the type tag debug information for an encoded object
     Info {
+        /// Path of file to decode or '-' if data is passed through stdin.
+        #[structopt(name = "FILE", parse(from_os_str))]
+        input: Option<PathBuf>
+    },
+
+    #[structopt(name = "tt")]
+    /// Display the type tag string for an encoded object
+    Tt {
         /// Path of file to decode or '-' if data is passed through stdin.
         #[structopt(name = "FILE", parse(from_os_str))]
         input: Option<PathBuf>
@@ -136,11 +136,11 @@ fn main() -> Result<()> {
         .quiet(opt.quiet)
         .verbosity(opt.verbosity)
         .init()?;
-    
+
     debug!("cde: verbosity set to: {}", opt.verbosity);
 
     match opt.cmd {
-        Command::Encode { output, class, sub_class, sub_sub_class, input } => {
+        Command::Encode { output, tt, input } => {
             info!("cde: encoding from {} to {}",
                 reader_name(&input)?.to_string_lossy(),
                 writer_name(&output)?.to_string_lossy());
@@ -153,8 +153,8 @@ fn main() -> Result<()> {
             let len = r.read_to_end(&mut data)?;
 
             // generate a type tag from the command line options
-            let tt = TypeTag::new(&class, &sub_class, &sub_sub_class, len as u32);
-            debug!("\n{}", tt);
+            let tt = TagBuilder::from_str(&tt).length(len as u32).build();
+            debug!("\n{:?}", tt);
 
             // write the encoded type tag
             w.write_all(tt.encode().as_bytes())?;
@@ -182,8 +182,8 @@ fn main() -> Result<()> {
                 tag.split_off(3)
             };
 
-            let tt = TypeTag::from(tag);
-            debug!("\n{}", tt);
+            let tt = TagBuilder::from_bytes(tag).build();
+            debug!("\n{:?}", tt);
 
             w.write_all(&data)?;
         }
@@ -192,6 +192,7 @@ fn main() -> Result<()> {
                 reader_name(&input)?.to_string_lossy());
 
             let mut r = reader(&input)?;
+            let mut w = writer(&None)?;
 
             // read in everything and split the tag from the data
             let mut s = Vec::<u8>::new();
@@ -204,8 +205,33 @@ fn main() -> Result<()> {
                 tag.split_off(3)
             };
 
-            let tt = TypeTag::from(tag);
-            debug!("\n{}", tt);
+            let tt = TagBuilder::from_bytes(tag).build();
+            debug!("\n{:?}", tt);
+
+            w.write_all(format!("\n{:?}", tt).as_bytes())?;
+        }
+        Command::Tt { input } => {
+            debug!("cde: reading info from {}",
+                reader_name(&input)?.to_string_lossy());
+
+            let mut r = reader(&input)?;
+            let mut w = writer(&None)?;
+
+            // read in everything and split the tag from the data
+            let mut s = Vec::<u8>::new();
+            let _ = r.read_to_end(&mut s)?;
+            let dec = encoder()?;
+            let mut tag = dec.decode(&s)?;
+            let _ = if tag[1] & 0x08 != 0 {
+                tag.split_off(6)
+            } else {
+                tag.split_off(3)
+            };
+
+            let tt = TagBuilder::from_bytes(tag).build();
+            debug!("\n{:?}", tt);
+
+            w.write_all(format!("\n{}\n", tt).as_bytes())?;
         }
     }
 

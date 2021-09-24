@@ -13,9 +13,7 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
+cde = { path = "../lib" }
 quote = "1.0"
-syn = { version = "1.0.72", features = ["full", "visit", "visit-mut", "extra-traits"] }
+syn = { version = "1.0.72", features = ["full", "visit", "visit-mut", "extra-traits", "parsing"] }
 proc-macro2 = "1.0.27"
-
-[dev-dependencies]
-cde = "0.1"

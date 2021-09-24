@@ -1,3 +1,4 @@
+#[macro_use] extern crate lazy_static;
 use anyhow::Result;
 use data_encoding::{ Encoding, Specification, SpecificationError };
 use thiserror::Error;
@@ -10,6 +11,14 @@ pub enum CdeError {
     InvalidSubClass(String),
     #[error("invalid sub-sub-class value: {0}")]
     InvalidSubSubClass(String),
+    #[error("numerical type value out of range (>=64): {0}")]
+    InvalidTypeNumber(u8),
+    #[error("type name begins with invalid letter not in [a-zA-Z0-9-_]: {0}")]
+    InvalidTypeFirstLetter(String),
+    #[error("parent type is non-experimental: {0}")]
+    NonExperimentalParentType(u8),
+    #[error("invalid non-ascii type name: {0}")]
+    InvalidTypeName(String)
 }
 
 pub static CDE_ALPHABET: &'static str = "abcdefghijklmnopqrstuvwxyz01234-ABCDEFGHIJKLMNOPQRSTUVWXYZ56789_";
@@ -24,22 +33,21 @@ pub fn idx(c: char) -> u8 {
     if let Some(i) = CDE_ALPHABET.find(c) {
         i as u8
     } else {
-        0
+        63
     }
 }
 
-pub trait CdeTag {
-    fn class(&self) -> Class;
-    fn subclass(&self) -> SubClass;
-    fn subsubclass(&self) -> SubSubClass;
+pub fn ch(i: u8) -> char {
+    if i < 64 {
+        CDE_ALPHABET.as_bytes()[i as usize] as char
+    } else {
+        '_'
+    }
 }
 
-mod class;
-mod subclass;
-mod subsubclass;
-mod typetag;
-// re-export
-pub use class::*;
-pub use subclass::*;
-pub use subsubclass::*;
-pub use typetag::*;
+pub trait CryptoData {
+    fn tag(&self) -> String;
+}
+
+mod tag;
+pub use tag::*;

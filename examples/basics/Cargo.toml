@@ -1,0 +1,11 @@
+[package]
+name = "cde-example-basics"
+version = "0.0.0"
+workspace = "../"
+edition = "2018"
+publish = false
+
+[dependencies]
+rand = "0.8"
+cde = { path = "../../core/lib" }
+cde_codegen = { path = "../../core/codegen" }

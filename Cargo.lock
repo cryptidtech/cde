@@ -42,33 +42,22 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "cde"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24e01e865381123aa2f3b103bce877cf5f398627ef9f3ea3d2753b1f71cd7b57"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "data-encoding",
- "structopt",
- "thiserror",
- "vlog",
-]
-
-[[package]]
-name = "cde"
-version = "0.1.1"
-dependencies = [
- "anyhow",
- "data-encoding",
+ "lazy_static",
  "log",
+ "syn",
  "thiserror",
 ]
 
 [[package]]
 name = "cde_cli"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
- "cde 0.1.0",
+ "cde",
  "log",
  "stderrlog",
  "structopt",
@@ -78,7 +67,7 @@ dependencies = [
 name = "cde_codegen"
 version = "0.1.0"
 dependencies = [
- "cde 0.1.0",
+ "cde",
  "proc-macro2",
  "quote",
  "syn",
@@ -365,12 +354,6 @@ name = "version_check"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
-
-[[package]]
-name = "vlog"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2266fcb904c50fb17fda4c9a751a1715629ecf8b21f4c9d78b4890fb71525d71"
 
 [[package]]
 name = "wasi"
