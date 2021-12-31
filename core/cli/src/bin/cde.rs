@@ -1,7 +1,6 @@
 extern crate structopt;
 
-use cde::{ encoder, TagBuilder };
-use anyhow::Result;
+use cde::{ Error, ENCODER, Result, TagBuilder };
 use log::*;
 use std::ffi::OsString;
 use std::fs::File;
@@ -135,7 +134,8 @@ fn main() -> Result<()> {
         .module(module_path!())
         .quiet(opt.quiet)
         .verbosity(opt.verbosity)
-        .init()?;
+        .init()
+        .map_err(|_| Error::GeneralError)?;
 
     debug!("cde: verbosity set to: {}", opt.verbosity);
 
@@ -153,15 +153,22 @@ fn main() -> Result<()> {
             let len = r.read_to_end(&mut data)?;
 
             // generate a type tag from the command line options
-            let tt = TagBuilder::from_str(&tt).length(len as u32).build();
+            let tt = TagBuilder::from_str(&tt).length(len as u32).build()?;
             debug!("\n{:?}", tt);
 
             // write the encoded type tag
-            w.write_all(tt.encode().as_bytes())?;
+            if tt.is_extended() {
+                let mut b = [0u8; 8];
+                tt.encode(&mut b);
+                w.write_all(&b)?;
+            } else {
+                let mut b = [0u8; 4];
+                tt.encode(&mut b);
+                w.write_all(&b)?;
+            }
 
             // write the encoded data
-            let enc = encoder()?;
-            w.write_all(enc.encode(&data).as_bytes())?;
+            w.write_all(ENCODER.encode(&data).as_bytes())?;
         },
         Command::Decode { output, input } => {
             info!("cde: decoding from {} to {}",
@@ -171,21 +178,14 @@ fn main() -> Result<()> {
             let mut r = reader(&input)?;
             let mut w = writer(&output)?;
 
-            // read in everything and split the tag from the data
+            // read in everything and decode the tag
             let mut s = Vec::<u8>::new();
             let _ = r.read_to_end(&mut s)?;
-            let dec = encoder()?;
-            let mut tag = dec.decode(&s)?;
-            let data = if tag[1] & 0x08 != 0 {
-                tag.split_off(6)
-            } else {
-                tag.split_off(3)
-            };
-
-            let tt = TagBuilder::from_bytes(tag).build();
+            let tag = ENCODER.decode(&s).map_err(|_| Error::DecodeError)?;
+            let tt = TagBuilder::from_bytes(&tag).build()?;
             debug!("\n{:?}", tt);
 
-            w.write_all(&data)?;
+            w.write_all(tt.as_bytes())?;
         }
         Command::Info { input } => {
             debug!("cde: reading info from {}",
@@ -194,18 +194,11 @@ fn main() -> Result<()> {
             let mut r = reader(&input)?;
             let mut w = writer(&None)?;
 
-            // read in everything and split the tag from the data
+            // read in everything and decode the tag
             let mut s = Vec::<u8>::new();
             let _ = r.read_to_end(&mut s)?;
-            let dec = encoder()?;
-            let mut tag = dec.decode(&s)?;
-            let _ = if tag[1] & 0x08 != 0 {
-                tag.split_off(6)
-            } else {
-                tag.split_off(3)
-            };
-
-            let tt = TagBuilder::from_bytes(tag).build();
+            let tag = ENCODER.decode(&s).map_err(|_| Error::DecodeError)?;
+            let tt = TagBuilder::from_bytes(&tag).build()?;
             debug!("\n{:?}", tt);
 
             w.write_all(format!("\n{:?}", tt).as_bytes())?;
@@ -217,18 +210,11 @@ fn main() -> Result<()> {
             let mut r = reader(&input)?;
             let mut w = writer(&None)?;
 
-            // read in everything and split the tag from the data
+            // read in everything and decode the tag
             let mut s = Vec::<u8>::new();
             let _ = r.read_to_end(&mut s)?;
-            let dec = encoder()?;
-            let mut tag = dec.decode(&s)?;
-            let _ = if tag[1] & 0x08 != 0 {
-                tag.split_off(6)
-            } else {
-                tag.split_off(3)
-            };
-
-            let tt = TagBuilder::from_bytes(tag).build();
+            let tag = ENCODER.decode(&s).map_err(|_| Error::DecodeError)?;
+            let tt = TagBuilder::from_bytes(&tag).build()?;
             debug!("\n{:?}", tt);
 
             w.write_all(format!("\n{}\n", tt).as_bytes())?;

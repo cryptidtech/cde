@@ -8,57 +8,9 @@ fn just_class() {
 }
 
 #[test]
-fn empty() {
-    let tt = Tag::from_str("").unwrap();
-    assert_eq!(idx('_'), tt.class());
-    assert_eq!(idx('_'), tt.subclass());
-    assert_eq!(0, tt.subsubclass());
-}
-
-#[test]
-fn numerical_class() {
-    let tt = Tag::from_str("10.ed25519").unwrap();
-    assert_eq!(idx('k'), tt.class());
-    assert_eq!(idx('e'), tt.subclass());
-    assert_eq!(0, tt.subsubclass());
-}
-
-#[test]
-fn exp_numerical_class() {
-    let tt = Tag::from_str("42.ed25519").unwrap();
-    assert_eq!(idx('K'), tt.class());
-    assert_eq!(idx('e'), tt.subclass());
-    assert_eq!(0, tt.subsubclass());
-}
-
-#[test]
-fn char_class() {
-    let tt = Tag::from_str("k.ed25519").unwrap();
-    assert_eq!(idx('k'), tt.class());
-    assert_eq!(idx('e'), tt.subclass());
-    assert_eq!(0, tt.subsubclass());
-}
-
-#[test]
-fn exp_char_class() {
-    let tt = Tag::from_str("K.foo").unwrap();
-    assert_eq!(idx('K'), tt.class());
-    assert_eq!(idx('f'), tt.subclass());
-    assert_eq!(0, tt.subsubclass());
-}
-
-#[test]
 #[should_panic]
-fn non_exp_char_class() {
-    let _tt = Tag::from_str("k.foo").unwrap();
-}
-
-#[test]
-fn class_and_subclass() {
-    let tt = Tag::from_str("key.ed25519").unwrap();
-    assert_eq!(idx('k'), tt.class());
-    assert_eq!(idx('e'), tt.subclass());
-    assert_eq!(0, tt.subsubclass());
+fn class_and_subclass_without_subsubclass() {
+    let _tt = Tag::from_str("key.ed25519").unwrap();
 }
 
 #[test]
@@ -71,48 +23,38 @@ fn class_subclass_subsubclass() {
 
 #[test]
 fn class_and_exp_subclass() {
-    let tt = Tag::from_str("key.ed25519.2").unwrap();
+    let tt = Tag::from_str("key.Ed25519.2").unwrap();
     assert_eq!(idx('k'), tt.class());
-    assert_eq!(idx('e'), tt.subclass());
+    assert_eq!(idx('E'), tt.subclass());
     assert_eq!(2, tt.subsubclass());
 }
 
 #[test]
+#[should_panic]
 fn exp_class_and_non_exp_subclass() {
-    let tt = Tag::from_str("Key.ed25519.2").unwrap();
-    assert_eq!(idx('K'), tt.class());
-    assert_eq!(idx('e'), tt.subclass());
-    assert_eq!(2, tt.subsubclass());
+    let _tt = Tag::from_str("Key.ed25519").unwrap();
 }
 
 #[test]
 fn exp_class() {
-    let tt = Tag::from_str("Key.foo").unwrap();
-    assert_eq!(idx('K'), tt.class());
-    assert_eq!(idx('f'), tt.subclass());
-    assert_eq!(0, tt.subsubclass());
-}
-
-#[test]
-fn exp_char_class_subclass() {
-    let tt = Tag::from_str("K.F.3").unwrap();
+    let tt = Tag::from_str("Key.Foo").unwrap();
     assert_eq!(idx('K'), tt.class());
     assert_eq!(idx('F'), tt.subclass());
-    assert_eq!(3, tt.subsubclass());
-}
-
-#[test]
-fn numeric_class_subclass_subsubclass() {
-    let tt = Tag::from_str("0.0.0").unwrap();
-    assert_eq!(idx('a'), tt.class());
-    assert_eq!(idx('a'), tt.subclass());
     assert_eq!(0, tt.subsubclass());
 }
 
 #[test]
 #[should_panic]
-fn non_exp_class() {
-    let _tt = Tag::from_str("key.foo").unwrap();
+fn nonexperimental_numeric_class_subclass_subsubclass() {
+    let _tt = Tag::from_str("0.0.0").unwrap();
+}
+
+#[test]
+fn experimental_numeric_class_subclass_subsubclass() {
+    let tt = Tag::from_str("5.5.5").unwrap();
+    assert_eq!(idx('5'), tt.class());
+    assert_eq!(idx('5'), tt.subclass());
+    assert_eq!(5, tt.subsubclass());
 }
 
 #[test]
@@ -125,62 +67,44 @@ fn exp_class_subclass() {
 
 #[test]
 #[should_panic]
-fn list_any() {
-    let _tt = Tag::from_str("list.any").unwrap();
+fn list_undefined() {
+    let _tt = Tag::from_str("list.undefined").unwrap();
 }
 
 #[test]
-fn list_list() {
-    let tt = Tag::from_str("-.-").unwrap();
-    assert_eq!(idx('-'), tt.class());
+fn undefined_list() {
+    let tt = Tag::from_str("undefined.list").unwrap();
+    assert_eq!(idx('_'), tt.class());
     assert_eq!(idx('-'), tt.subclass());
     assert_eq!(0, tt.subsubclass());
-}
-
-#[test]
-fn list_list_subsubclass() {
-    let tt = Tag::from_str("-.-.0").unwrap();
-    assert_eq!(idx('-'), tt.class());
-    assert_eq!(idx('-'), tt.subclass());
-    assert_eq!(0, tt.subsubclass());
-}
-
-#[test]
-fn list_list_exp_subsubclass() {
-    let tt = Tag::from_str("-.-.5").unwrap();
-    assert_eq!(idx('-'), tt.class());
-    assert_eq!(idx('-'), tt.subclass());
-    assert_eq!(5, tt.subsubclass());
 }
 
 #[test]
 fn print_class_subclass_subsubclass() {
-    let tt = Tag::from_str("key.ed25519").unwrap();
-    assert_eq!("key.ed25519.0", format!("{}", tt));
+    let tt = Tag::from_str("key.ed25519.secret").unwrap();
+    assert_eq!("key.ed25519.secret", format!("{}", tt));
 }
 
 #[test]
 fn print_exp_class_subclass_subsubclass() {
     let tt = Tag::from_str("Key.Foo").unwrap();
-    assert_eq!("Key.Foo.0", format!("{}", tt));
+    assert_eq!("Key.F", format!("{}", tt));
 }
 
 #[test]
+#[should_panic]
 fn print_empty() {
-    let tt = Tag::from_str("").unwrap();
-    assert_eq!("_._.0", format!("{}", tt));
+    let _tt = Tag::from_str("").unwrap();
 }
 
 #[test]
-fn print_any() {
-    let tt = Tag::from_str("_").unwrap();
-    assert_eq!("_._.0", format!("{}", tt));
+#[should_panic]
+fn print_undefined() {
+    let _tt = Tag::from_str("undefined").unwrap();
 }
 
 #[test]
 fn print_list_list_exp_subsubclass() {
-    let tt = Tag::from_str("-.-.5").unwrap();
-    assert_eq!("-.-.5", format!("{}", tt));
+    let tt = Tag::from_str("list.list.5").unwrap();
+    assert_eq!("list.list.5", format!("{}", tt));
 }
-
-

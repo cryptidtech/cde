@@ -1,174 +1,545 @@
-use crate::{ ch, idx, encoder, CdeError, CDE_ALPHABET };
-use log::info;
-use std::collections::HashMap;
-use std::fmt::{ self, Debug, Display, Formatter };
+use crate::{idx, Error, CDE_ALPHABET, ENCODER, Result};
+use std::fmt::{self, Debug, Display, Formatter};
 use std::str::FromStr;
-use std::string::ToString;
+
+// include the generated hashmaps
+include!(concat!(env!("OUT_DIR"), "/hashmaps.rs"));
+
+static NUMBERS: &'static str = "0123456789";
+static UNDEFINED: &'static str = "undefined";
 
 #[derive(Default)]
 pub struct Tag {
-    c: u8,
-    sc: u8,
-    ssc: u8,
-    len: u32,
-    c_name: Option<String>,
-    sc_name: Option<String>,
-    ssc_name: Option<String>,
+    t: [u8; 6]
+}
+
+impl Tag {
+
+    pub fn is_extended(&self) -> bool {
+        (self.t[1] & 0x08) != 0
+    }
+
+    pub fn set_length(&mut self, len: u32) {
+        if len > 255 {
+            // store the length
+            self.t[2..].copy_from_slice(&len.to_be_bytes());
+
+            // set the extended length bit
+            self.t[1] |= 0x08;
+        } else {
+            // store the length
+            self.t[2] = len as u8;
+
+            // clear the extended length bit
+            self.t[1] &= 0xF7;
+        }
+    }
+
+    pub fn get_length(&self) -> usize {
+        if self.is_extended() {
+            let mut buf: [u8; 4] = [0; 4];
+            buf.copy_from_slice(&self.t[2..]);
+            u32::from_be_bytes(buf) as usize
+        } else {
+            self.t[2] as usize
+        }
+    }
+
+    pub fn is_exp_class(&self) -> bool {
+        (self.t[0] & 0x80) != 0
+    }
+
+    pub fn is_exp_sub_class(&self) -> bool {
+        (self.t[0] & 0x02) != 0
+    }
+
+    pub fn set_exp_class(&mut self, exp: bool) {
+        if exp {
+            self.t[0] |= 0x80;
+        } else {
+            self.t[0] &= 0xf7;
+        }
+    }
+
+    pub fn set_exp_sub_class(&mut self, exp: bool) {
+        if exp {
+            self.t[0] |= 0x02;
+        } else {
+            self.t[0] &= 0xfd;
+        }
+    }
+
+    pub fn encode_len(&self) -> usize {
+        if self.is_extended() {
+            8
+        } else {
+            4
+        }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.t
+    }
+
+    pub fn encode(&self, out: &mut [u8]) {
+        ENCODER.encode_mut(&self.t, out)
+    }
+
+    pub fn name(&self) -> Result<(&str, &str, Option<&str>)> {
+        let n: [u8; 3] = [self.class(), self.subclass(), self.subsubclass()];
+        let i: [usize; 3] = [n[0] as usize, n[1] as usize, n[2] as usize];
+
+        if let Some((c, sc_map)) = NAMES.get(&n[0]) {
+            if let Some((sc, ssc_map)) = sc_map.get(&n[1]) {
+                if let Some(ssc_map) = ssc_map {
+                    //NOTE: due to a bug in the phf maps, we cannot use 0-indexing
+                    //so we use 1-indexing instead as a work-around
+                    if let Some(ssc) = ssc_map.get(&(n[2] + 1)) {
+                        println!("found sub-sub-class: {}", ssc);
+                        return Ok((c, sc, Some(*ssc)));
+                    } else {
+                        println!("using sub-sub-class number instead");
+                        return Ok((c, sc, NUMBERS.get(i[2]..i[2]+1)));
+                    }
+                } else {
+                    return Ok((c, sc, NUMBERS.get(i[2]..i[2]+1)));
+                } 
+            } else if let Some(sc) = CDE_ALPHABET.get(i[1]..i[1]+1) {
+                return Ok((c, sc, None));
+            } else {
+                return Ok((c, UNDEFINED, None));
+            }
+        } else if let Some(c) = CDE_ALPHABET.get(i[0]..i[0]+1) {
+            if let Some(sc) = CDE_ALPHABET.get(i[1]..i[1]+1) {
+                return Ok((c, sc, None));
+            } else {
+                return Ok((c, UNDEFINED, None));
+            }
+        } else {
+            return Ok((UNDEFINED, UNDEFINED, None));
+        }
+    }
+
+    pub fn class(&self) -> u8 {
+        ((self.t[0] & 0xfc) >> 2) & 0x3f
+    }
+
+    pub fn subclass(&self) -> u8 {
+        (((self.t[0] & 0x03) << 4) | ((self.t[1] & 0xf0) >> 4)) & 0x3f
+    }
+
+    pub fn subsubclass(&self) -> u8 {
+        self.t[1] & 0x07
+    }
+}
+
+enum TagBuildFrom {
+    Str,
+    Byt
+}
+
+pub struct TagBuilder<'a> {
+    how: TagBuildFrom,
+    s: Option<&'a str>,
+    b: Option<&'a [u8]>,
+    l: u32
+}
+
+impl Default for TagBuilder<'_> {
+    fn default() -> Self {
+        TagBuilder {
+            how: TagBuildFrom::Str,
+            s: None,
+            b: None,
+            l: 0u32,
+        }
+    }
+}
+
+impl<'a> TagBuilder<'a> {
+    pub fn from_str(s: &'a str) -> Self {
+        TagBuilder {
+            how: TagBuildFrom::Str,
+            s: Some(s),
+            b: None,
+            l: 0u32,
+        }
+    }
+
+    pub fn from_bytes(b: &'a [u8]) -> Self {
+        TagBuilder {
+            how: TagBuildFrom::Byt,
+            s: None,
+            b: Some(b),
+            l: 0u32,
+        }
+    }
+
+    pub fn length(mut self, l: u32) -> Self {
+        self.l = l;
+        self
+    }
+
+    pub fn build(self) -> Result<Tag>  {
+        let mut tag = match self.how {
+            TagBuildFrom::Str => {
+                match self.s {
+                    None => return Err(Error::TagFromStr),
+                    Some(s) =>  {
+                        Tag::from_str(s)?
+                    }
+                }
+            },
+            TagBuildFrom::Byt => {
+                match self.b {
+                    None => return Err(Error::TagFromBytes),
+                    Some(s) => {
+                        Tag::from(s)
+                    }
+                }
+            }
+        };
+
+        tag.set_length(self.l);
+        Ok(tag)
+    }
+}
+
+impl Display for Tag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if let Ok((c, sc, ssc)) = self.name() {
+            if let Some(ssc) = ssc {
+                write!(f, "{}.{}.{}", c, sc, ssc)
+            } else {
+                write!(f, "{}.{}", c, sc)
+            }
+        } else {
+            Err(core::fmt::Error)
+        }
+    }
 }
 
 impl<T: AsRef<[u8]>> From<T> for Tag {
     fn from(v: T) -> Self {
-        // get the class value
-        let c = ((v.as_ref()[0] & 0xFC) >> 2) & 0x3F;
-
-        // get the sub-class value
-        let sc = (((v.as_ref()[0] & 0x03) << 4) | ((v.as_ref()[1] & 0xF0) >> 4)) & 0x3F;
-
-        // get the sub-sub-class value
-        let ssc = v.as_ref()[1] & 0x07;
-
-        // get the length from the stream
-        let len = if v.as_ref().len() > 3 {
-            info!("Tag 8-bit words: {:#02x} {:#02x} {:#02x} {:#02x} {:#02x} {:#02x}",
-                  v.as_ref()[0], v.as_ref()[1], v.as_ref()[2], v.as_ref()[3],
-                  v.as_ref()[4], v.as_ref()[5]);
-            let b: [u8; 4] = [v.as_ref()[2], v.as_ref()[3], v.as_ref()[4], v.as_ref()[5]];
-            u32::from_be_bytes(b)
-        } else {
-            info!("Tag 8-bit words: {:#02x} {:#02x} {:#02x}", v.as_ref()[0],
-                  v.as_ref()[1], v.as_ref()[2]);
-            v.as_ref()[2] as u32
-        };
-
-        Tag {
-            c: c,
-            sc: sc,
-            ssc: ssc,
-            len: len,
-            c_name: None,
-            sc_name: None,
-            ssc_name: None
+        let mut tag = Tag::default();
+        if v.as_ref().len() >= 6 {
+            tag.t.copy_from_slice(&v.as_ref()[..6]);
+        } else if v.as_ref().len() >= 3 {
+            tag.t[..3].copy_from_slice(&v.as_ref()[..3]);
         }
-    }
-}
 
-fn parse_type_name(name: &String, max: u8) -> Result<u8, CdeError> {
-    if !name.is_ascii() {
-        // raise an error if the type name is not ascii
-        return Err(CdeError::InvalidTypeName(name.to_owned()));
-    }
+        println!("{:08b} {:08b} {:08b} {:08b} {:08b} {:08b}",
+                 tag.t[0], tag.t[1], tag.t[2], tag.t[3], tag.t[4], tag.t[5]);
 
-    // we try several things to convert the supplied type name string into an
-    // appropriate type value. first we try to parse a u8 that has a value <64.
-    // then we look at the first letter of the name and try to get the index
-    // value for the character. we raise an error if neither works.
-    match u8::from_str_radix(name.as_str(), 10) {
-        Ok(i) if i < max => {
-            return Ok(i);
-        },
-        Ok(i) => {
-            // they used a number but it was >= max
-            return Err(CdeError::InvalidTypeNumber(i));
-        },
-        Err(_) => {
-            match CDE_ALPHABET.find(name.chars().nth(0).unwrap() as char) {
-                Some(i) => {
-                    return Ok(i as u8);
-                },
-                None => {
-                    return Err(CdeError::InvalidTypeFirstLetter(name.to_owned()));
-                }
-            }
-        }
+        tag
     }
 }
 
 impl FromStr for Tag {
-    type Err = CdeError;
+    type Err = Error;
 
-    fn from_str(tag: &str) -> Result<Self, Self::Err> {
-        let empty = HashMap::new();
-        let mut i = tag.split('.');
+    /// This takes a tag string name like "key.ed25519.public" and parses it
+    /// into a Tag containing the correct class, sub-class, and sub-sub-class
+    /// values. The length is initiatlized to zero.
+    fn from_str(tag: &str) -> Result<Self> {
 
-        // try to look up the class value by name
-        let c_name = match i.next() {
-            Some(c) if c.len() == 0 => "_",
-            Some(c) => c,
-            None => "_"
-        };
+        // checks if the value is experimental
+        fn experimental(v: u8) -> bool {
+            (v > 31) && (v != 63)
+        }
 
-        let (c_value, sc_vals) = match CDE_VALUES.get(c_name) {
-            Some((v, h)) => (*v, h),
-            None => { // try parsing the name into a value
-                let cval = parse_type_name(&c_name.to_string(), 64)?;
-                let mut tmp = [0; 4];
-                let cn = ch(cval).encode_utf8(&mut tmp);
-                match CDE_VALUES.get(cn) {
-                    Some((v, h)) => (*v, h),
-                    None => { return Err(CdeError::InvalidClass(cn.to_string())); }
+        /// If the str is a single character
+        fn name_or_char(v: &str) -> Option<u8> {
+            if v.len() >= 1 {
+                if let Some(c) = v.chars().next() {
+                    if let Some(c) = CDE_ALPHABET.find(c) {
+                        return Some(c as u8);
+                    }
                 }
             }
+            None
+        }
+
+        let parts = match tag.len() {
+            0 => (None, None, None),
+            _ => {
+                let mut s = tag.split('.');
+                (s.next(), s.next(), s.next())
+            },
         };
 
-        // try to look up the sub-class value by name
-        let sc_name = match i.next() {
-            Some(c) if c.len() == 0 => "_",
-            Some(c) => c,
-            None => "_"
-        };
-        
-        let (sc_value, ssc_vals) = match sc_vals.get(sc_name) {
-            Some((v, h)) => (*v, h),
-            None => { // try parsing the name into a value
-                let scval = parse_type_name(&sc_name.to_string(), 64)?;
-                let mut tmp = [0; 4];
-                let scn = ch(scval).encode_utf8(&mut tmp);
-                match sc_vals.get(scn) {
-                    Some((v, h)) => (*v, h),
-                    None if c_value > 31 => (scval, &empty),
-                    None => { return Err(CdeError::InvalidSubClass(scn.to_string())); }
+        let (c, sc, ssc) = match parts {
+            (Some(c_name), Some(sc_name), Some(ssc_name)) => {
+                //println!("have {}, {}, {}...", c_name, sc_name, ssc_name);
+                match VALUES.get(c_name) {
+                    None => {
+                        if let Some(c) = name_or_char(c_name) {
+                            // if we get here they specified a non-standard...
+                            if !experimental(c) {
+                                // ...it must be experimental or it is an error...
+                                return Err(Error::InvalidClass);
+                            } else if let Some(sc) = name_or_char(sc_name) {
+                                if !experimental(sc) {
+                                    // ...the sub-class must be experimental or it is an error
+                                    return Err(Error::InvalidSubClass);
+                                } else if let Ok(ssc) = u8::from_str_radix(ssc_name, 10) {
+                                    // ...both class and sub-class are experimental so 
+                                    // also return the sub-sub-class number
+                                    (c, sc, ssc)
+                                } else {
+                                    // ...the sub-sub-class was not a base 10 number
+                                    return Err(Error::InvalidSubSubClass);
+                                }
+                            } else {
+                                // ...the sub-class value wasn't a string
+                                return Err(Error::InvalidSubClass);
+                            }
+                        } else {
+                            // .. the class value wasn't a string
+                            return Err(Error::InvalidClass);
+                        }
+                    },
+                    Some((c, sc_map)) => {
+                        // the class name was a standard class name
+                        match sc_map.get(sc_name) {
+                            None => {
+                                // the sub-class was not a standard sub-class name
+                                if !experimental(*c) {
+                                    // ...the class must be experimental or it is an error
+                                    return Err(Error::InvalidClass);
+                                } else if let Some(sc) = name_or_char(sc_name) {
+                                    if !experimental(sc) {
+                                        // ...the sub-class must be experimental or it is an error
+                                        return Err(Error::InvalidSubClass)
+                                    } else if let Ok(ssc) = u8::from_str_radix(ssc_name, 10) {
+                                        // ...both class and sub-class are experimental so
+                                        // also return the sub-sub-class number
+                                        (*c, sc, ssc)
+                                    } else {
+                                        // ...the sub-sub-class was not a base 10 number
+                                        return Err(Error::InvalidSubSubClass);
+                                    }
+                                } else {
+                                    // ...the sub-class value wasn't a string
+                                    return Err(Error::InvalidSubClass);
+                                }
+                            },
+                            Some((sc, ssc_map)) => {
+                                // the sub-class name was a standard class name
+                                match ssc_map {
+                                    None => {
+                                        // there are no sub-sub-classes for this class and
+                                        // sub-class combination
+                                        if experimental(*c) {
+                                            if experimental(*sc) {
+                                                // both the class and sub-class are standard
+                                                // and experimental so just return them with
+                                                // the experimental sub-sub-class
+                                                if let Ok(ssc) = u8::from_str_radix(ssc_name, 10) {
+                                                    (*c, *sc, ssc)
+                                                } else {
+                                                    // the sub-sub-class was not a base 10 number
+                                                    return Err(Error::InvalidSubSubClass);
+                                                }
+                                            } else {
+                                                // an experimental class with a non-experimental
+                                                // sub-class is an error
+                                                return Err(Error::InvalidSubClass);
+                                            }
+                                        } else {
+                                            // the class is not experimental so it doesn't matter
+                                            // if the sub-class is experimental or not...just get
+                                            // the sub-sub-class number and return all three
+                                            if let Ok(ssc) = u8::from_str_radix(ssc_name, 10) {
+                                                (*c, *sc, ssc)
+                                            } else {
+                                                // the sub-sub-class was not a base 10 number
+                                                return Err(Error::InvalidSubSubClass);
+                                            }
+                                        }
+                                    },
+                                    Some(ssc_map) => {
+                                        // there are sub-sub-classes for this class and
+                                        // sub-class combination
+                                        if experimental(*c)  {
+                                            if experimental(*sc) {
+                                                // both the class and sub-class are standard
+                                                // and experimental so just return them with
+                                                // the experimental sub-sub-class
+                                                match ssc_map.get(ssc_name) {
+                                                    None => {
+                                                        if let Ok(ssc) = u8::from_str_radix(ssc_name, 10) {
+                                                            (*c, *sc, ssc)
+                                                        } else {
+                                                            return Err(Error::InvalidSubSubClass);
+                                                        }
+                                                    },
+                                                    // subtract 1 from the sub-sub-class number
+                                                    // because of a bug in the phf map we had to
+                                                    // use 1-indexed maps instead of 0-indexed maps
+                                                    Some(ssc) => (*c, *sc, *ssc-1),
+                                                }
+                                            } else {
+                                                // an experimental class with a non-experimental
+                                                // sub-class is an error
+                                                return Err(Error::InvalidSubClass);
+                                            }
+                                        } else {
+                                            // the class is not experimental so it doesn't matter
+                                            // if the sub-class is experimental or not...just get
+                                            // the sub-sub-class number and return all three
+                                            match ssc_map.get(ssc_name) {
+                                                None => {
+                                                    if let Ok(ssc) = u8::from_str_radix(ssc_name, 10) {
+                                                        (*c, *sc, ssc)
+                                                    } else {
+                                                        return Err(Error::InvalidSubSubClass);
+                                                    }
+                                                },
+                                                // subtract 1 from the sub-sub-class number
+                                                // because of a bug in the phf map we had to
+                                                // use 1-indexed maps instead of 0-indexed maps
+                                                Some(ssc) => (*c, *sc, *ssc-1)
+                                            }
+                                        }
+                                    },
+                                }
+                            },
+                        }
+                    },
                 }
-            }
-        };
+            },
 
-        // try to look up the sub-sub-class value by name
-        let ssc_name = match i.next() {
-            Some(c) if c.len() == 0 => "0",
-            Some(c) => c,
-            None => "0" // it's ok if this is missing
-        };
-
-        let ssc_value = match ssc_vals.get(ssc_name) {
-            Some(v) => *v,
-            None => { // try parsing the name into a value
-                let sscval = parse_type_name(&ssc_name.to_string(), 64)?;
-                let mut tmp = [0; 4];
-                let sscn = ch(sscval).encode_utf8(&mut tmp);
-                match ssc_vals.get(sscn) {
-                    Some(v) => *v,
-                    None => sscval
+            (Some(c_name), Some(sc_name), None) => {
+                //println!("have {}, {}...", c_name, sc_name);
+                match VALUES.get(c_name) {
+                    None => {
+                        // the class is non-standard...
+                        if let Some(c) = name_or_char(c_name) {
+                            if !experimental(c) {
+                                // ...it must be experimental or it is an error
+                                return Err(Error::InvalidClass);
+                            } else if let Some(sc) = name_or_char(sc_name) {
+                                if !experimental(sc) {
+                                    // ...and therefore the sub-class must also be
+                                    // experimental or it is an error
+                                    return Err(Error::InvalidSubClass);
+                                } else {
+                                    // it is OK to specify an experimental non-standard class and
+                                    // experimental non-standard sub-class without a sub-sub-class.
+                                    // the sub-sub-class just defaults to 0
+                                    (c, sc, 0)
+                                }
+                            } else {
+                                // the sub-class name wasn't a string
+                                return Err(Error::InvalidSubClass);
+                            }
+                        } else {
+                            // the class name wasn't a string
+                            return Err(Error::InvalidClass);
+                        }
+                    },
+                    Some((c, sc_map)) => {
+                        // the class is standard...
+                        match sc_map.get(sc_name) {
+                            None => {
+                                // ...the sub-class name is non-standard...
+                                if !experimental(*c) {
+                                    // ...the class must be experimental or it is an error...
+                                    return Err(Error::InvalidClass);
+                                } else if let Some(sc) = name_or_char(sc_name) {
+                                    if !experimental(sc) {
+                                        // ...the sub-class must also be experimental
+                                        // or it is an error
+                                        return Err(Error::InvalidSubClass);
+                                    } else {
+                                        // it is OK to specify an experimental standard class and
+                                        // an experimental non-standard sub-class without
+                                        // specifying a sub-sub-class. the sub-sub-class just
+                                        // defaults to 0
+                                        (*c, sc, 0)
+                                    }
+                                } else {
+                                    // ...the sub-class name wasn't a string
+                                    return Err(Error::InvalidSubClass);
+                                }
+                            },
+                            Some((sc, ssc_map)) => {
+                                // ...the sub-class name is standard...
+                                match ssc_map {
+                                    None => {
+                                        // the only valid possibilities for this case are:
+                                        // "undefined.undefined"
+                                        // "undefined.list"
+                                        // "list.list"
+                                        if (*c == idx('_') && (*sc == idx('_') || *sc == idx('-'))) ||
+                                           (*c == idx('-') && *sc == idx('-')) {
+                                            (*c, *sc, 0)
+                                        } else {
+                                            return Err(Error::InvalidSubSubClass);
+                                        }
+                                    },
+                                    Some(_) => {
+                                        // if we get here, there is a sub-sub-class
+                                        // map and they didn't specify which sub-sub-class
+                                        // this is an error
+                                        return Err(Error::InvalidSubSubClass);
+                                    },
+                                }
+                            },
+                        }
+                    },
                 }
-            }
+            },
+
+            (Some(_), None, None) => {
+                // there is no valid case where just the class is specified
+                return Err(Error::InvalidSubClass);
+            },
+
+            (None, None, None) => {
+                // there is no valid case where nothing is specified...
+                // this case is triggered if the string is the empty string
+                return Err(Error::InvalidClass);
+            },
+
+            // everything other combination is invalid...
+            _ => return Err(Error::TagFromStr),
         };
 
-        Ok(Tag {
-            c: c_value,
-            sc: sc_value,
-            ssc: ssc_value,
-            len: 0,
-            c_name: Some(c_name.to_string()),
-            sc_name: Some(sc_name.to_string()),
-            ssc_name: Some(ssc_name.to_string())
-        })
+        //println!("have values: {}, {}, {}...", c, sc, ssc);
+
+        // pack the type values into a byte buffer
+        let buf: [u8; 3] = [
+            ((((c & 0x3f) << 2) & 0xfc) | (((sc & 0x30) >> 4) & 0x03)),
+            ((((sc & 0x0f) << 4) & 0xf0) | (ssc & 0x07)),
+            0
+        ];
+
+        //println!("{:08b} {:08b} {:08b}", buf[0], buf[1], buf[2]);
+
+        // construct the tag from the bytes
+        Ok(Tag::from(buf))
     }
 }
 
 impl Debug for Tag {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let s = self.encode();
-        let (cn, scn, sscn) = self.name();
+        let mut b = [0u8; 8];
+        self.encode(&mut b);
+        let s = core::str::from_utf8(&mut b).unwrap();
+        let mut i = s.chars();
+        let (cn, scn, sscn) = self.name().unwrap();
+        let sscn = match sscn {
+            None => "None",
+            Some(sscn) => sscn
+        };
         if self.is_extended() {
-            let c: Vec<char> = s.chars().take(8).collect();
+            let c: [char; 8] = [i.next().unwrap(), i.next().unwrap(),
+                                i.next().unwrap(), i.next().unwrap(), 
+                                i.next().unwrap(), i.next().unwrap(),
+                                i.next().unwrap(), i.next().unwrap()];
+
             writeln!(f, "       encoding unit 1          optional encoding unit 2")?;
             writeln!(f, " /--------------------------/ /--------------------------/")?;
             writeln!(f, "/--{}--//--{}--//--{}--//--{}--/ /--{}--//--{}--//--{}--//--{}--/",
@@ -176,7 +547,7 @@ impl Debug for Tag {
             writeln!(f, "{:06b} {:06b} {:06b} {:06b}  {:06b} {:06b} {:06b} {:06b}",
                         idx(c[0]), idx(c[1]), idx(c[2]), idx(c[3]), idx(c[4]), idx(c[5]), idx(c[6]), idx(c[7]))?;
             writeln!(f, "||   | ||   | || ||                                    |")?;
-            writeln!(f, "||   | ||   | || |+------------------------------------+.. len: {}", self.len)?;
+            writeln!(f, "||   | ||   | || |+------------------------------------+.. len: {}", self.get_length())?;
             writeln!(f, "||   | ||   | |+-+........................................ sub-sub-class: {}", sscn)?;
             writeln!(f, "||   | ||   | +........................................... ext. length: {}", (idx(c[2]) > 31) as bool)?;
             writeln!(f, "||   | |+---+............................................. sub-class: {}", scn)?;
@@ -184,7 +555,9 @@ impl Debug for Tag {
             writeln!(f, "|+---+.................................................... class: {}", cn)?;
             writeln!(f, "+......................................................... exp. class: {}", (idx(c[0]) > 31) as bool)?;
         } else {
-            let c: Vec<char> = s.chars().take(4).collect();
+            let c: [char; 4] = [i.next().unwrap(), i.next().unwrap(),
+                                i.next().unwrap(), i.next().unwrap()];
+
             writeln!(f, "       encoding unit 1")?;
             writeln!(f, " /--------------------------/")?;
             writeln!(f, "/--{}--//--{}--//--{}--//--{}--/",
@@ -192,7 +565,7 @@ impl Debug for Tag {
             writeln!(f, "{:06b} {:06b} {:06b} {:06b}",
                         idx(c[0]), idx(c[1]), idx(c[2]), idx(c[3]))?;
             writeln!(f, "||   | ||   | || ||       |")?;
-            writeln!(f, "||   | ||   | || |+-------+.. len: {}", self.len)?;
+            writeln!(f, "||   | ||   | || |+-------+.. len: {}", self.get_length())?;
             writeln!(f, "||   | ||   | |+-+........... sub-sub-class: {}", sscn)?;
             writeln!(f, "||   | ||   | +.............. ext. length: {}", (idx(c[2]) > 31) as bool)?;
             writeln!(f, "||   | |+---+................ sub-class: {}", scn)?;
@@ -204,1177 +577,6 @@ impl Debug for Tag {
     }
 }
 
-impl Display for Tag {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let (c, sc, ssc) = self.name();
-        let s = [c, sc, ssc].join(".");
-        write!(f, "{}", s)
-    }
+
+mod tests {
 }
-
-impl Tag {
-
-    pub fn is_extended(&self) -> bool {
-        self.len > 255
-    }
-
-    pub(crate) fn set_length(&mut self, len: u32) {
-        self.len = len;
-    }
-
-    pub fn encode(&self) -> String {
-        let vec = if self.is_extended() {
-            let mut v: Vec<u8> = Vec::new();
-            v.push((self.c << 2) | ((self.sc & 0x30) >> 4));
-            v.push(((self.sc & 0x0F) << 4) | 0x08 | self.ssc);
-            v.extend_from_slice(&self.len.to_be_bytes());
-            v
-        } else {
-            let mut v: Vec<u8> = Vec::new();
-            v.push((self.c << 2) | ((self.sc & 0x30) >> 4));
-            v.push(((self.sc & 0x0F) << 4) | self.ssc);
-            v.push(self.len as u8);
-            v
-        };
-
-        let enc = encoder().unwrap();
-        enc.encode(&vec)
-    }
-
-    pub fn name(&self) -> (String, String, String) {
-        let empty1 = HashMap::new();
-        let empty2 = HashMap::new();
-
-        let (c, sc_names) = match CDE_NAMES.get(&self.c) {
-            Some((c, h)) => (c, h),
-            None => (&"_", &empty1)
-        };
-
-        let c_name = match &self.c_name {
-            Some(c) => c.clone(),
-            None => c.to_string()
-        };
-
-        let (sc, ssc_names) = match sc_names.get(&self.sc) {
-            Some((sc, h)) => (sc, h),
-            None => (&"_", &empty2)
-        };
-
-        let sc_name = match &self.sc_name {
-            Some(sc) => sc.clone(),
-            None => sc.to_string()
-        };
-
-        let ssc = match ssc_names.get(&self.ssc) {
-            Some(ssc) => ssc,
-            None => &"0"
-        };
-
-        let ssc_name = match &self.ssc_name {
-            Some(ssc) => ssc.clone(),
-            None => ssc.to_string()
-        };
-
-        (c_name, sc_name, ssc_name)
-    }
-
-    pub fn class(&self) -> u8 {
-        self.c
-    }
-
-    pub fn subclass(&self) -> u8 {
-        self.sc
-    }
-
-    pub fn subsubclass(&self) -> u8 {
-        self.ssc
-    }
-}
-
-enum TagBuildFrom {
-    Str,
-    Byt
-}
-
-pub struct TagBuilder {
-    how: TagBuildFrom,
-    s: String,
-    b: Vec<u8>,
-    l: u32
-}
-
-impl TagBuilder {
-    pub fn from_str(s: &str) -> Self {
-        TagBuilder {
-            how: TagBuildFrom::Str,
-            s: String::from(s),
-            b: Vec::new(),
-            l: 0u32
-        }
-    }
-
-    pub fn from_bytes<T: AsRef<[u8]>>(b: T) -> Self {
-        let mut v = Vec::new();
-        v.extend_from_slice(b.as_ref());
-        TagBuilder {
-            how: TagBuildFrom::Byt,
-            s: String::new(),
-            b: v,
-            l: 0u32
-        }
-    }
-
-    pub fn length(mut self, l: u32) -> Self {
-        self.l = l;
-        self
-    }
-
-    pub fn build(self) -> Tag {
-        match self.how {
-            TagBuildFrom::Str => {
-                let mut tt = Tag::from_str(&self.s).unwrap();
-                tt.set_length(self.l);
-                tt
-            },
-            TagBuildFrom::Byt => {
-                Tag::from(&self.b)
-            }
-        }
-    }
-}
-
-lazy_static! {
-
-    static ref CDE_VALUES: HashMap<&'static str, (u8, HashMap<&'static str, (u8, HashMap<&'static str, u8>)>)> = {
-        let mut m = HashMap::new();
-
-        /* aead sub-classes */
-        let aead = {
-            let mut m = HashMap::new();
-
-            m.insert("a", (idx('a'), HashMap::new()));
-            m.insert("c", (idx('c'), HashMap::new()));
-            m.insert("i", (idx('i'), HashMap::new()));
-            m.insert("x", (idx('x'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("aes256-gcm", (idx('a'), HashMap::new()));
-            m.insert("chacha20-poly1305", (idx('c'), HashMap::new()));
-            m.insert("chacha20-poly1305-ietf", (idx('i'), HashMap::new()));
-            m.insert("xchacha20-poly1305-ietf", (idx('x'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m
-        };
-
-        /* cipher sub-classes */
-        let cipher = {
-            let mut m = HashMap::new();
-
-            /* aes sub-sub-classes */
-            let aes = {
-                let mut m = HashMap::new();
-                m.insert("256", 0);
-                m.insert("128", 1);
-                m.insert("192", 2);
-                m
-            };
-
-            m.insert("a", (idx('a'), aes.clone()));
-            m.insert("x", (idx('x'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("aes", (idx('a'), aes));
-            m.insert("xchacha20", (idx('x'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m
-        };
-
-        /* digest sub-classes */
-        let digest = {
-            let mut m = HashMap::new();
-
-            /* blake2 sub-sub-classes */
-            let blake2 = {
-                let mut m = HashMap::new();
-                m.insert("b", 0);
-                m.insert("s", 1);
-                m
-            };
-
-            /* md sub-sub-classes */
-            let md = {
-                let mut m = HashMap::new();
-                m.insert("5", 0);
-                m.insert("4", 1);
-                m.insert("2", 2);
-                m.insert("6", 3);
-                m
-            };
-
-            /* sha2 sub-sub-classes */
-            let sha2 = {
-                let mut m = HashMap::new();
-                m.insert("256", 0);
-                m.insert("512", 1);
-                m.insert("224", 2);
-                m.insert("384", 3);
-                m.insert("512/224", 4);
-                m.insert("512/256", 5);
-                m
-            };
-
-            /* sha3 sub-sub-classes */
-            let sha3 = {
-                let mut m = HashMap::new();
-                m.insert("256", 0);
-                m.insert("512", 1);
-                m.insert("224", 2);
-                m.insert("384", 3);
-                m
-            };
-
-            /* shake sub-sub-classes */
-            let shake = {
-                let mut m = HashMap::new();
-                m.insert("128", 0);
-                m.insert("256", 1);
-                m
-            };
-
-            m.insert("b", (idx('b'), blake2.clone()));
-            m.insert("m", (idx('m'), md.clone()));
-            m.insert("1", (idx('1'), HashMap::new()));
-            m.insert("2", (idx('2'), sha2.clone()));
-            m.insert("3", (idx('3'), sha3.clone()));
-            m.insert("k", (idx('k'), shake.clone()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("blake2", (idx('b'), blake2));
-            m.insert("md", (idx('m'), md));
-            m.insert("sha1", (idx('1'), HashMap::new()));
-            m.insert("sha2", (idx('2'), sha2));
-            m.insert("sha3", (idx('3'), sha3));
-            m.insert("shake", (idx('k'), shake));
-            m.insert("list", (idx('-'), HashMap::new()));
-            
-            m
-        };
-
-        /* identifier sub-classes */
-        let identifier = {
-            let mut m = HashMap::new();
-
-            m.insert("a", (idx('a'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("author", (idx('a'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m
-        };
-
-        /* key sub-classes */
-        let key = {
-            let mut m = HashMap::new();
-
-            /* ed25519 sub-sub-classes */
-            let ed25519 = {
-                let mut m = HashMap::new();
-                m.insert("public", 0);
-                m.insert("secret", 1);
-                m
-            };
-
-            /* rsa sub-sub-classes */
-            let rsa = {
-                let mut m = HashMap::new();
-                m.insert("public", 0);
-                m.insert("secret", 1);
-                m
-            };
-
-            m.insert("e", (idx('e'), ed25519.clone()));
-            m.insert("r", (idx('r'), rsa.clone()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("ed25519", (idx('e'), ed25519));
-            m.insert("rsa", (idx('r'), rsa));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m
-        };
-
-        /* policy sub-classes */
-        let policy = {
-            let mut m = HashMap::new();
-
-            m.insert("b", (idx('b'), HashMap::new()));
-            m.insert("r", (idx('r'), HashMap::new()));
-            m.insert("s", (idx('s'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("bitcoin", (idx('b'), HashMap::new()));
-            m.insert("r1cs", (idx('r'), HashMap::new()));
-            m.insert("solidity", (idx('s'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m
-        };
-
-        /* signature sub-classes */
-        let signature = {
-            let mut m = HashMap::new();
-
-            m.insert("m", (idx('m'), HashMap::new()));
-            m.insert("o", (idx('o'), HashMap::new()));
-            m.insert("p", (idx('p'), HashMap::new()));
-            m.insert("x", (idx('x'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("minisign", (idx('m'), HashMap::new()));
-            m.insert("openssl", (idx('o'), HashMap::new()));
-            m.insert("pgp", (idx('p'), HashMap::new()));
-            m.insert("x509", (idx('x'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m
-        };
-
-        /* list sub-classes */
-        let list = {
-            let mut m = HashMap::new();
-            m.insert("-", (idx('-'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m
-        };
-
-        /* any sub-classes */
-        let any = {
-            let mut m = HashMap::new();
-            m.insert("-", (idx('-'), HashMap::new()));
-            m.insert("_", (idx('_'), HashMap::new()));
-
-            m.insert("list", (idx('-'), HashMap::new()));
-            m.insert("any", (idx('_'), HashMap::new()));
-
-            m
-        };
-
-        /* standard classes */
-        m.insert("a", (idx('a'), aead.clone()));
-        m.insert("c", (idx('c'), cipher.clone()));
-        m.insert("d", (idx('d'), digest.clone()));
-        m.insert("f", (idx('f'), HashMap::new()));
-        m.insert("h", (idx('h'), HashMap::new()));
-        m.insert("i", (idx('i'), identifier.clone()));
-        m.insert("k", (idx('k'), key.clone()));
-        m.insert("n", (idx('n'), HashMap::new()));
-        m.insert("p", (idx('p'), policy.clone()));
-        m.insert("s", (idx('s'), signature.clone()));
-        m.insert("-", (idx('-'), list.clone()));
-        m.insert("_", (idx('_'), any.clone()));
-
-        m.insert("aead", (idx('a'), aead));
-        m.insert("cipher", (idx('c'), cipher));
-        m.insert("digest", (idx('d'), digest));
-        m.insert("proof", (idx('f'), HashMap::new()));
-        m.insert("hmac", (idx('h'), HashMap::new()));
-        m.insert("identifier", (idx('i'), identifier));
-        m.insert("key", (idx('k'), key));
-        m.insert("nonce", (idx('n'), HashMap::new()));
-        m.insert("policy", (idx('p'), policy));
-        m.insert("signature", (idx('s'), signature));
-        m.insert("list", (idx('-'), list.clone()));
-        m.insert("any", (idx('_'), any.clone()));
-
-        /* experimental classes */
-        m.insert("A", (idx('A'), HashMap::new()));
-        m.insert("C", (idx('C'), HashMap::new()));
-        m.insert("D", (idx('D'), HashMap::new()));
-        m.insert("F", (idx('F'), HashMap::new()));
-        m.insert("H", (idx('H'), HashMap::new()));
-        m.insert("I", (idx('I'), HashMap::new()));
-        m.insert("K", (idx('K'), HashMap::new()));
-        m.insert("N", (idx('N'), HashMap::new()));
-        m.insert("P", (idx('P'), HashMap::new()));
-        m.insert("S", (idx('S'), HashMap::new()));
-
-        m.insert("Aead", (idx('A'), HashMap::new()));
-        m.insert("Cipher", (idx('C'), HashMap::new()));
-        m.insert("Digest", (idx('D'), HashMap::new()));
-        m.insert("Proof", (idx('F'), HashMap::new()));
-        m.insert("Hmac", (idx('H'), HashMap::new()));
-        m.insert("Identifier", (idx('I'), HashMap::new()));
-        m.insert("Key", (idx('K'), HashMap::new()));
-        m.insert("Nonce", (idx('N'), HashMap::new()));
-        m.insert("Policy", (idx('P'), HashMap::new()));
-        m.insert("Signature", (idx('S'), HashMap::new()));
-        m.insert("List", (idx('-'), list));
-        m.insert("Any", (idx('_'), any));
-
-        m
-    };
-
-    static ref CDE_NAMES: HashMap<u8, (&'static str, HashMap<u8, (&'static str, HashMap<u8, &'static str>)>)> = {
-        let mut m = HashMap::new();
-
-        /* aead sub-classes */
-        let aead = {
-            let mut m = HashMap::new();
-            m.insert(idx('a'), ("aes256-gcm", HashMap::new()));
-            m.insert(idx('c'), ("chacha20-poly1305", HashMap::new()));
-            m.insert(idx('i'), ("chacha20-poly1305-ietf", HashMap::new()));
-            m.insert(idx('x'), ("xchacha20-poly1305-ietf", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m
-        };
-
-        /* cipher sub-classes */
-        let cipher = {
-            let mut m = HashMap::new();
-
-            /* aes sub-sub-classes */
-            let aes = {
-                let mut m = HashMap::new();
-                m.insert(0, "256");
-                m.insert(1, "128");
-                m.insert(2, "192");
-                m
-            };
-
-            m.insert(idx('a'), ("aes", aes));
-            m.insert(idx('x'), ("xchacha20", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m
-        };
-
-        /* digest sub-classes */
-        let digest = {
-            let mut m = HashMap::new();
-
-            /* blake2 sub-sub-classes */
-            let blake2 = {
-                let mut m = HashMap::new();
-                m.insert(0, "b");
-                m.insert(1, "s");
-                m
-            };
-
-            /* md sub-sub-classes */
-            let md = {
-                let mut m = HashMap::new();
-                m.insert(0, "5");
-                m.insert(1, "4");
-                m.insert(2, "2");
-                m.insert(3, "6");
-                m
-            };
-
-            /* sha2 sub-sub-classes */
-            let sha2 = {
-                let mut m = HashMap::new();
-                m.insert(0, "256");
-                m.insert(1, "512");
-                m.insert(2, "224");
-                m.insert(3, "384");
-                m.insert(4, "512/224");
-                m.insert(5, "512/256");
-                m
-            };
-
-            /* sha3 sub-sub-classes */
-            let sha3 = {
-                let mut m = HashMap::new();
-                m.insert(0, "256");
-                m.insert(1, "512");
-                m.insert(2, "224");
-                m.insert(3, "384");
-                m
-            };
-
-            /* shake sub-sub-classes */
-            let shake = {
-                let mut m = HashMap::new();
-                m.insert(0, "128");
-                m.insert(1, "256");
-                m
-            };
-
-            m.insert(idx('b'), ("blake2", blake2));
-            m.insert(idx('m'), ("md", md));
-            m.insert(idx('1'), ("sha1", HashMap::new()));
-            m.insert(idx('2'), ("sha2", sha2));
-            m.insert(idx('3'), ("sha3", sha3));
-            m.insert(idx('k'), ("shake", shake));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m
-        };
-
-
-        /* identifier sub-classes */
-        let identifier = {
-            let mut m = HashMap::new();
-            m.insert(idx('a'), ("author", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-            
-            m
-        };
-
-        /* key sub-classes */
-        let key = {
-            let mut m = HashMap::new();
-
-            /* key_ed25519 sub-classes */
-            let ed25519 = {
-                let mut m = HashMap::new();
-                m.insert(0, "public");
-                m.insert(1, "secret");
-                m
-            };
-
-            /* key_rsa sub-classes */
-            let rsa = {
-                let mut m = HashMap::new();
-                m.insert(0, "public");
-                m.insert(1, "secret");
-                m
-            };
-
-            m.insert(idx('e'), ("ed25519", ed25519));
-            m.insert(idx('r'), ("rsa", rsa));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m
-        };
-
-
-        /* policy sub-classes */
-        let policy = {
-            let mut m = HashMap::new();
-            m.insert(idx('b'), ("bitcoin", HashMap::new()));
-            m.insert(idx('r'), ("r1cs", HashMap::new()));
-            m.insert(idx('s'), ("solidity", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m
-        };
-
-        /* signature sub-classes */
-        let signature = {
-            let mut m = HashMap::new();
-            m.insert(idx('m'), ("minisign", HashMap::new()));
-            m.insert(idx('o'), ("openssl", HashMap::new()));
-            m.insert(idx('p'), ("pgp", HashMap::new()));
-            m.insert(idx('x'), ("x509", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m
-        };
-
-        /* list sub-classes */
-        let list = {
-            let mut m = HashMap::new();
-            m.insert(idx('-'), ("list", HashMap::new()));
-            m
-        };
-
-        /* any sub-classes */
-        let any = {
-            let mut m = HashMap::new();
-            m.insert(idx('-'), ("list", HashMap::new()));
-            m.insert(idx('_'), ("any", HashMap::new()));
-            m
-        };
-
-
-        /* standard classes */
-        m.insert(idx('a'), ("aead", aead));
-        m.insert(idx('c'), ("cipher", cipher));
-        m.insert(idx('d'), ("digest", digest));
-        m.insert(idx('f'), ("proof", HashMap::new()));
-        m.insert(idx('h'), ("hmac", HashMap::new()));
-        m.insert(idx('i'), ("identifier", identifier));
-        m.insert(idx('k'), ("key", key));
-        m.insert(idx('n'), ("nonce", HashMap::new()));
-        m.insert(idx('p'), ("policy", policy));
-        m.insert(idx('s'), ("signature", signature));
-        m.insert(idx('-'), ("list", list));
-        m.insert(idx('_'), ("any", any));
-
-        /* experimental classes */
-        m.insert(idx('A'), ("Aead", HashMap::new()));
-        m.insert(idx('C'), ("Cipher", HashMap::new()));
-        m.insert(idx('D'), ("Digest", HashMap::new()));
-        m.insert(idx('F'), ("Proof", HashMap::new()));
-        m.insert(idx('H'), ("Hmac", HashMap::new()));
-        m.insert(idx('I'), ("Identifier", HashMap::new()));
-        m.insert(idx('K'), ("Key", HashMap::new()));
-        m.insert(idx('N'), ("Nonce", HashMap::new()));
-        m.insert(idx('P'), ("Policy", HashMap::new()));
-        m.insert(idx('S'), ("Signature", HashMap::new()));
-        m
-    };
-}
-
-/*
-lazy_static! {
-
-    static ref CDE_VALUES: HashMap<&'static str, (u8, HashMap<&'static str, (u8, HashMap<&'static str, u8>)>)> = {
-        let mut m = HashMap::new();
-
-        /* aead sub-classes */
-        let aead = {
-            let mut m = HashMap::new();
-
-            m.insert("a", (idx('a'), HashMap::new()));
-            m.insert("c", (idx('c'), HashMap::new()));
-            m.insert("i", (idx('i'), HashMap::new()));
-            m.insert("x", (idx('x'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("aes256-gcm", (idx('a'), HashMap::new()));
-            m.insert("chacha20-poly1305", (idx('c'), HashMap::new()));
-            m.insert("chacha20-poly1305-ietf", (idx('i'), HashMap::new()));
-            m.insert("xchacha20-poly1305-ietf", (idx('x'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m.insert("A", (idx('A'), HashMap::new()));
-            m.insert("C", (idx('C'), HashMap::new()));
-            m.insert("I", (idx('I'), HashMap::new()));
-            m.insert("X", (idx('X'), HashMap::new()));
-
-            m.insert("Aes256-gcm", (idx('A'), HashMap::new()));
-            m.insert("Chacha20-poly1305", (idx('C'), HashMap::new()));
-            m.insert("Chacha20-poly1305-ietf", (idx('I'), HashMap::new()));
-            m.insert("Xchacha20-poly1305-ietf", (idx('X'), HashMap::new()));
-
-            m
-        };
-
-        /* cipher sub-classes */
-        let cipher = {
-            let mut m = HashMap::new();
-
-            /* aes sub-sub-classes */
-            let aes = {
-                let mut m = HashMap::new();
-                m.insert("256", 0);
-                m.insert("128", 1);
-                m.insert("192", 2);
-                m
-            };
-
-            m.insert("a", (idx('a'), aes.clone()));
-            m.insert("x", (idx('x'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("aes", (idx('a'), aes));
-            m.insert("xchacha20", (idx('x'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m.insert("A", (idx('A'), HashMap::new()));
-            m.insert("X", (idx('X'), HashMap::new()));
-
-            m.insert("Aes", (idx('A'), HashMap::new()));
-            m.insert("Xchacha20", (idx('X'), HashMap::new()));
-            m
-        };
-
-        /* digest sub-classes */
-        let digest = {
-            let mut m = HashMap::new();
-
-            /* blake2 sub-sub-classes */
-            let blake2 = {
-                let mut m = HashMap::new();
-                m.insert("b", 0);
-                m.insert("s", 1);
-                m
-            };
-
-            /* md sub-sub-classes */
-            let md = {
-                let mut m = HashMap::new();
-                m.insert("5", 0);
-                m.insert("4", 1);
-                m.insert("2", 2);
-                m.insert("6", 3);
-                m
-            };
-
-            /* sha2 sub-sub-classes */
-            let sha2 = {
-                let mut m = HashMap::new();
-                m.insert("256", 0);
-                m.insert("512", 1);
-                m.insert("224", 2);
-                m.insert("384", 3);
-                m.insert("512/224", 4);
-                m.insert("512/256", 5);
-                m
-            };
-
-            /* sha3 sub-sub-classes */
-            let sha3 = {
-                let mut m = HashMap::new();
-                m.insert("256", 0);
-                m.insert("512", 1);
-                m.insert("224", 2);
-                m.insert("384", 3);
-                m
-            };
-
-            /* shake sub-sub-classes */
-            let shake = {
-                let mut m = HashMap::new();
-                m.insert("128", 0);
-                m.insert("256", 1);
-                m
-            };
-
-            m.insert("b", (idx('b'), blake2.clone()));
-            m.insert("m", (idx('m'), md.clone()));
-            m.insert("1", (idx('1'), HashMap::new()));
-            m.insert("2", (idx('2'), sha2.clone()));
-            m.insert("3", (idx('3'), sha3.clone()));
-            m.insert("k", (idx('k'), shake.clone()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("blake2", (idx('b'), blake2));
-            m.insert("md", (idx('m'), md));
-            m.insert("sha1", (idx('1'), HashMap::new()));
-            m.insert("sha2", (idx('2'), sha2));
-            m.insert("sha3", (idx('3'), sha3));
-            m.insert("shake", (idx('k'), shake));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m.insert("B", (idx('B'), HashMap::new()));
-            m.insert("M", (idx('M'), HashMap::new()));
-            m.insert("6", (idx('6'), HashMap::new()));
-            m.insert("7", (idx('7'), HashMap::new()));
-            m.insert("8", (idx('8'), HashMap::new()));
-            m.insert("K", (idx('K'), HashMap::new()));
-
-            m.insert("Blake2", (idx('b'), HashMap::new()));
-            m.insert("Md", (idx('m'), HashMap::new()));
-            m.insert("Sha1", (idx('6'), HashMap::new()));
-            m.insert("Sha2", (idx('7'), HashMap::new()));
-            m.insert("Sha3", (idx('8'), HashMap::new()));
-            m.insert("Shake", (idx('K'), HashMap::new()));
-            m
-        };
-
-        /* identifier sub-classes */
-        let identifier = {
-            let mut m = HashMap::new();
-
-            m.insert("a", (idx('a'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("author", (idx('a'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m.insert("A", (idx('A'), HashMap::new()));
-
-            m.insert("Author", (idx('A'), HashMap::new()));
-            m
-        };
-
-        /* key sub-classes */
-        let key = {
-            let mut m = HashMap::new();
-
-            /* ed25519 sub-sub-classes */
-            let ed25519 = {
-                let mut m = HashMap::new();
-                m.insert("public", 0);
-                m.insert("secret", 1);
-                m
-            };
-
-            /* rsa sub-sub-classes */
-            let rsa = {
-                let mut m = HashMap::new();
-                m.insert("public", 0);
-                m.insert("secret", 1);
-                m
-            };
-
-            m.insert("e", (idx('e'), ed25519.clone()));
-            m.insert("r", (idx('r'), rsa.clone()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("ed25519", (idx('e'), ed25519));
-            m.insert("rsa", (idx('r'), rsa));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m.insert("E", (idx('E'), HashMap::new()));
-            m.insert("R", (idx('R'), HashMap::new()));
-
-            m.insert("Ed25519", (idx('E'), HashMap::new()));
-            m.insert("Rsa", (idx('R'), HashMap::new()));
-            m
-        };
-
-        /* policy sub-classes */
-        let policy = {
-            let mut m = HashMap::new();
-
-            m.insert("b", (idx('b'), HashMap::new()));
-            m.insert("r", (idx('r'), HashMap::new()));
-            m.insert("s", (idx('s'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("bitcoin", (idx('b'), HashMap::new()));
-            m.insert("r1cs", (idx('r'), HashMap::new()));
-            m.insert("solidity", (idx('s'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m.insert("B", (idx('B'), HashMap::new()));
-            m.insert("R", (idx('R'), HashMap::new()));
-            m.insert("S", (idx('S'), HashMap::new()));
-
-            m.insert("Bitcoin", (idx('B'), HashMap::new()));
-            m.insert("R1cs", (idx('R'), HashMap::new()));
-            m.insert("Solidity", (idx('S'), HashMap::new()));
-            m
-        };
-
-        /* signature sub-classes */
-        let signature = {
-            let mut m = HashMap::new();
-
-            m.insert("m", (idx('m'), HashMap::new()));
-            m.insert("o", (idx('o'), HashMap::new()));
-            m.insert("p", (idx('p'), HashMap::new()));
-            m.insert("x", (idx('x'), HashMap::new()));
-            m.insert("-", (idx('-'), HashMap::new()));
-
-            m.insert("minisign", (idx('m'), HashMap::new()));
-            m.insert("openssl", (idx('o'), HashMap::new()));
-            m.insert("pgp", (idx('p'), HashMap::new()));
-            m.insert("x509", (idx('x'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m.insert("M", (idx('M'), HashMap::new()));
-            m.insert("O", (idx('O'), HashMap::new()));
-            m.insert("P", (idx('P'), HashMap::new()));
-            m.insert("X", (idx('X'), HashMap::new()));
-
-            m.insert("Minisign", (idx('M'), HashMap::new()));
-            m.insert("Openssl", (idx('O'), HashMap::new()));
-            m.insert("Pgp", (idx('P'), HashMap::new()));
-            m.insert("X509", (idx('X'), HashMap::new()));
-            m
-        };
-
-        /* list sub-classes */
-        let list = {
-            let mut m = HashMap::new();
-            m.insert("-", (idx('-'), HashMap::new()));
-            m.insert("list", (idx('-'), HashMap::new()));
-
-            m.insert("List", (idx('-'), HashMap::new()));
-            m
-        };
-
-        /* any sub-classes */
-        let any = {
-            let mut m = HashMap::new();
-            m.insert("-", (idx('-'), HashMap::new()));
-            m.insert("_", (idx('_'), HashMap::new()));
-
-            m.insert("list", (idx('-'), HashMap::new()));
-            m.insert("any", (idx('_'), HashMap::new()));
-
-            m.insert("List", (idx('-'), HashMap::new()));
-            m.insert("Any", (idx('_'), HashMap::new()));
-            m
-        };
-
-        /* standard classes */
-        m.insert("a", (idx('a'), aead.clone()));
-        m.insert("c", (idx('c'), cipher.clone()));
-        m.insert("d", (idx('d'), digest.clone()));
-        m.insert("f", (idx('f'), HashMap::new()));
-        m.insert("h", (idx('h'), HashMap::new()));
-        m.insert("i", (idx('i'), identifier.clone()));
-        m.insert("k", (idx('k'), key.clone()));
-        m.insert("n", (idx('n'), HashMap::new()));
-        m.insert("p", (idx('p'), policy.clone()));
-        m.insert("s", (idx('s'), signature.clone()));
-        m.insert("-", (idx('-'), list.clone()));
-
-        m.insert("aead", (idx('a'), aead));
-        m.insert("cipher", (idx('c'), cipher));
-        m.insert("digest", (idx('d'), digest));
-        m.insert("proof", (idx('f'), HashMap::new()));
-        m.insert("hmac", (idx('h'), HashMap::new()));
-        m.insert("identifier", (idx('i'), identifier));
-        m.insert("key", (idx('k'), key));
-        m.insert("nonce", (idx('n'), HashMap::new()));
-        m.insert("policy", (idx('p'), policy));
-        m.insert("signature", (idx('s'), signature));
-        m.insert("list", (idx('-'), list.clone()));
-        m.insert("any", (idx('_'), any.clone()));
-
-        /* experimental classes */
-        m.insert("A", (idx('A'), HashMap::new()));
-        m.insert("C", (idx('C'), HashMap::new()));
-        m.insert("D", (idx('D'), HashMap::new()));
-        m.insert("F", (idx('F'), HashMap::new()));
-        m.insert("H", (idx('H'), HashMap::new()));
-        m.insert("I", (idx('I'), HashMap::new()));
-        m.insert("K", (idx('K'), HashMap::new()));
-        m.insert("N", (idx('N'), HashMap::new()));
-        m.insert("P", (idx('P'), HashMap::new()));
-        m.insert("S", (idx('S'), HashMap::new()));
-        m.insert("_", (idx('_'), any.clone()));
-
-        m.insert("Aead", (idx('A'), HashMap::new()));
-        m.insert("Cipher", (idx('C'), HashMap::new()));
-        m.insert("Digest", (idx('D'), HashMap::new()));
-        m.insert("Proof", (idx('F'), HashMap::new()));
-        m.insert("Hmac", (idx('H'), HashMap::new()));
-        m.insert("Identifier", (idx('I'), HashMap::new()));
-        m.insert("Key", (idx('K'), HashMap::new()));
-        m.insert("Nonce", (idx('N'), HashMap::new()));
-        m.insert("Policy", (idx('P'), HashMap::new()));
-        m.insert("Signature", (idx('S'), HashMap::new()));
-        m.insert("List", (idx('-'), list));
-        m.insert("Any", (idx('_'), any));
-
-        m
-    };
-
-    static ref CDE_NAMES: HashMap<u8, (&'static str, HashMap<u8, (&'static str, HashMap<u8, &'static str>)>)> = {
-        let mut m = HashMap::new();
-
-        /* aead sub-classes */
-        let aead = {
-            let mut m = HashMap::new();
-            m.insert(idx('a'), ("aes256-gcm", HashMap::new()));
-            m.insert(idx('c'), ("chacha20-poly1305", HashMap::new()));
-            m.insert(idx('i'), ("chacha20-poly1305-ietf", HashMap::new()));
-            m.insert(idx('x'), ("xchacha20-poly1305-ietf", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m.insert(idx('A'), ("Aes256-gcm", HashMap::new()));
-            m.insert(idx('C'), ("Chacha20-poly1305", HashMap::new()));
-            m.insert(idx('I'), ("Chacha20-poly1305-ietf", HashMap::new()));
-            m.insert(idx('X'), ("Xchacha20-poly1305-ietf", HashMap::new()));
-            m
-        };
-
-        /* cipher sub-classes */
-        let cipher = {
-            let mut m = HashMap::new();
-
-            /* aes sub-sub-classes */
-            let aes = {
-                let mut m = HashMap::new();
-                m.insert(0, "256");
-                m.insert(1, "128");
-                m.insert(2, "192");
-                m
-            };
-
-            m.insert(idx('a'), ("aes", aes));
-            m.insert(idx('x'), ("xchacha20", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m.insert(idx('A'), ("Aes", HashMap::new()));
-            m.insert(idx('X'), ("Xchacha20", HashMap::new()));
-            m
-        };
-
-        /* digest sub-classes */
-        let digest = {
-            let mut m = HashMap::new();
-
-            /* blake2 sub-sub-classes */
-            let blake2 = {
-                let mut m = HashMap::new();
-                m.insert(0, "b");
-                m.insert(1, "s");
-                m
-            };
-
-            /* md sub-sub-classes */
-            let md = {
-                let mut m = HashMap::new();
-                m.insert(0, "5");
-                m.insert(1, "4");
-                m.insert(2, "2");
-                m.insert(3, "6");
-                m
-            };
-
-            /* sha2 sub-sub-classes */
-            let sha2 = {
-                let mut m = HashMap::new();
-                m.insert(0, "256");
-                m.insert(1, "512");
-                m.insert(2, "224");
-                m.insert(3, "384");
-                m.insert(4, "512/224");
-                m.insert(5, "512/256");
-                m
-            };
-
-            /* sha3 sub-sub-classes */
-            let sha3 = {
-                let mut m = HashMap::new();
-                m.insert(0, "256");
-                m.insert(1, "512");
-                m.insert(2, "224");
-                m.insert(3, "384");
-                m
-            };
-
-            /* shake sub-sub-classes */
-            let shake = {
-                let mut m = HashMap::new();
-                m.insert(0, "128");
-                m.insert(1, "256");
-                m
-            };
-
-            m.insert(idx('b'), ("blake2", blake2));
-            m.insert(idx('m'), ("md", md));
-            m.insert(idx('1'), ("sha1", HashMap::new()));
-            m.insert(idx('2'), ("sha2", sha2));
-            m.insert(idx('3'), ("sha3", sha3));
-            m.insert(idx('k'), ("shake", shake));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m.insert(idx('B'), ("Blake2", HashMap::new()));
-            m.insert(idx('M'), ("Md", HashMap::new()));
-            m.insert(idx('6'), ("Sha1", HashMap::new()));
-            m.insert(idx('7'), ("Sha2", HashMap::new()));
-            m.insert(idx('8'), ("Sha3", HashMap::new()));
-            m.insert(idx('K'), ("Shake", HashMap::new()));
-            m
-        };
-
-
-        /* identifier sub-classes */
-        let identifier = {
-            let mut m = HashMap::new();
-            m.insert(idx('a'), ("author", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-            
-            m.insert(idx('A'), ("Author", HashMap::new()));
-            m
-        };
-
-        /* key sub-classes */
-        let key = {
-            let mut m = HashMap::new();
-
-            /* key_ed25519 sub-classes */
-            let ed25519 = {
-                let mut m = HashMap::new();
-                m.insert(0, "public");
-                m.insert(1, "secret");
-                m
-            };
-
-            /* key_rsa sub-classes */
-            let rsa = {
-                let mut m = HashMap::new();
-                m.insert(0, "public");
-                m.insert(1, "secret");
-                m
-            };
-
-            m.insert(idx('e'), ("ed25519", ed25519));
-            m.insert(idx('r'), ("rsa", rsa));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m.insert(idx('E'), ("Ed25519", HashMap::new()));
-            m.insert(idx('R'), ("Rsa", HashMap::new()));
-            m
-        };
-
-
-        /* policy sub-classes */
-        let policy = {
-            let mut m = HashMap::new();
-            m.insert(idx('b'), ("bitcoin", HashMap::new()));
-            m.insert(idx('r'), ("r1cs", HashMap::new()));
-            m.insert(idx('s'), ("solidity", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m.insert(idx('B'), ("Bitcoin", HashMap::new()));
-            m.insert(idx('R'), ("R1cs", HashMap::new()));
-            m.insert(idx('S'), ("Solidity", HashMap::new()));
-            m
-        };
-
-        /* signature sub-classes */
-        let signature = {
-            let mut m = HashMap::new();
-            m.insert(idx('m'), ("minisign", HashMap::new()));
-            m.insert(idx('o'), ("openssl", HashMap::new()));
-            m.insert(idx('p'), ("pgp", HashMap::new()));
-            m.insert(idx('x'), ("x509", HashMap::new()));
-            m.insert(idx('-'), ("list", HashMap::new()));
-
-            m.insert(idx('M'), ("Minisign", HashMap::new()));
-            m.insert(idx('O'), ("Openssl", HashMap::new()));
-            m.insert(idx('P'), ("Pgp", HashMap::new()));
-            m.insert(idx('X'), ("X509", HashMap::new()));
-            m
-        };
-
-        /* list sub-classes */
-        let list = {
-            let mut m = HashMap::new();
-            m.insert(idx('-'), ("list", HashMap::new()));
-            m
-        };
-
-        /* any sub-classes */
-        let any = {
-            let mut m = HashMap::new();
-            m.insert(idx('-'), ("list", HashMap::new()));
-            m.insert(idx('_'), ("any", HashMap::new()));
-            m
-        };
-
-
-        /* standard classes */
-        m.insert(idx('a'), ("aead", aead));
-        m.insert(idx('c'), ("cipher", cipher));
-        m.insert(idx('d'), ("digest", digest));
-        m.insert(idx('f'), ("proof", HashMap::new()));
-        m.insert(idx('h'), ("hmac", HashMap::new()));
-        m.insert(idx('i'), ("identifier", identifier));
-        m.insert(idx('k'), ("key", key));
-        m.insert(idx('n'), ("nonce", HashMap::new()));
-        m.insert(idx('p'), ("policy", policy));
-        m.insert(idx('s'), ("signature", signature));
-        m.insert(idx('-'), ("list", list));
-
-        /* experimental classes */
-        m.insert(idx('A'), ("Aead", HashMap::new()));
-        m.insert(idx('C'), ("Cipher", HashMap::new()));
-        m.insert(idx('D'), ("Digest", HashMap::new()));
-        m.insert(idx('F'), ("Proof", HashMap::new()));
-        m.insert(idx('H'), ("Hmac", HashMap::new()));
-        m.insert(idx('I'), ("Identifier", HashMap::new()));
-        m.insert(idx('K'), ("Key", HashMap::new()));
-        m.insert(idx('N'), ("Nonce", HashMap::new()));
-        m.insert(idx('P'), ("Policy", HashMap::new()));
-        m.insert(idx('S'), ("Signature", HashMap::new()));
-        m.insert(idx('_'), ("Any", any));
-        m
-    };
-}*/
