@@ -55,9 +55,18 @@ pub fn ch(i: u8) -> char {
     }
 }
 
-pub trait CryptoDataTag {
+/// The #[cde("class.subclass.subsubclass")] macro automatically generates
+/// impls of this trait for your cryptographic data object. the object must
+/// impl the CryptoData trait below so that the Tag associated with your object
+/// will set the data's length at runtime when the Tag is serialized.
+pub trait CryptoDataTag<T: CryptoData> {
     fn as_str(&self) -> &str;
     fn as_bytes(&self) -> &[u8];
+}
+
+pub trait CryptoData {
+    fn get_length(&self) -> usize;
+    fn encode(&self, encoded: &mut [u8]);
 }
 
 mod tag;

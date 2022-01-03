@@ -1,4 +1,4 @@
-use crate::{idx, Error, CDE_ALPHABET, ENCODER, Result};
+use crate::{idx, Error, CDE_ALPHABET, ENCODER, CryptoData, Result};
 use std::fmt::{self, Debug, Display, Formatter};
 use std::str::FromStr;
 
@@ -10,63 +10,66 @@ static UNDEFINED: &'static str = "undefined";
 
 #[derive(Default)]
 pub struct Tag {
-    t: [u8; 6]
+    b: [u8; 6],
+    e: [u8; 8],
 }
 
 impl Tag {
 
+    pub(crate) fn update_encoding(&mut self) {
+        if self.is_extended() {
+            // encode all 6 bytes
+            ENCODER.encode_mut(&self.b, &mut self.e)
+        } else {
+            // only encode the first 3 bytes
+            ENCODER.encode_mut(&self.b[..3], &mut self.e[..4])
+        }
+    }
+
     pub fn is_extended(&self) -> bool {
-        (self.t[1] & 0x08) != 0
+        (self.b[1] & 0x08) != 0
     }
 
     pub fn set_length(&mut self, len: u32) {
         if len > 255 {
             // store the length
-            self.t[2..].copy_from_slice(&len.to_be_bytes());
+            self.b[2..].copy_from_slice(&len.to_be_bytes());
 
             // set the extended length bit
-            self.t[1] |= 0x08;
+            self.b[1] |= 0x08;
         } else {
             // store the length
-            self.t[2] = len as u8;
+            self.b[2] = len as u8;
 
             // clear the extended length bit
-            self.t[1] &= 0xF7;
+            self.b[1] &= 0xF7;
         }
-    }
-
-    pub fn get_length(&self) -> usize {
-        if self.is_extended() {
-            let mut buf: [u8; 4] = [0; 4];
-            buf.copy_from_slice(&self.t[2..]);
-            u32::from_be_bytes(buf) as usize
-        } else {
-            self.t[2] as usize
-        }
+        self.update_encoding();
     }
 
     pub fn is_exp_class(&self) -> bool {
-        (self.t[0] & 0x80) != 0
+        (self.b[0] & 0x80) != 0
     }
 
     pub fn is_exp_sub_class(&self) -> bool {
-        (self.t[0] & 0x02) != 0
+        (self.b[0] & 0x02) != 0
     }
 
     pub fn set_exp_class(&mut self, exp: bool) {
         if exp {
-            self.t[0] |= 0x80;
+            self.b[0] |= 0x80;
         } else {
-            self.t[0] &= 0xf7;
+            self.b[0] &= 0xf7;
         }
     }
 
     pub fn set_exp_sub_class(&mut self, exp: bool) {
         if exp {
-            self.t[0] |= 0x02;
+            self.b[0] |= 0x02;
         } else {
-            self.t[0] &= 0xfd;
+            self.b[0] &= 0xfd;
         }
+        self.update_encoding();
     }
 
     pub fn encode_len(&self) -> usize {
@@ -78,11 +81,17 @@ impl Tag {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        &self.t
+        &self.b
     }
 
-    pub fn encode(&self, out: &mut [u8]) {
-        ENCODER.encode_mut(&self.t, out)
+    pub fn as_str(&self) -> &str {
+        if self.is_extended() {
+            // return the full 8 bytes as &str
+            core::str::from_utf8(&self.e).unwrap()
+        } else {
+            // only the first 4 bytes as &str
+            core::str::from_utf8(&self.e[..4]).unwrap()
+        }
     }
 
     pub fn name(&self) -> Result<(&str, &str, Option<&str>)> {
@@ -121,15 +130,41 @@ impl Tag {
     }
 
     pub fn class(&self) -> u8 {
-        ((self.t[0] & 0xfc) >> 2) & 0x3f
+        ((self.b[0] & 0xfc) >> 2) & 0x3f
     }
 
     pub fn subclass(&self) -> u8 {
-        (((self.t[0] & 0x03) << 4) | ((self.t[1] & 0xf0) >> 4)) & 0x3f
+        (((self.b[0] & 0x03) << 4) | ((self.b[1] & 0xf0) >> 4)) & 0x3f
     }
 
     pub fn subsubclass(&self) -> u8 {
-        self.t[1] & 0x07
+        self.b[1] & 0x07
+    }
+}
+
+impl CryptoData for Tag {
+    pub fn len(&self) -> usize {
+        if self.is_extended() {
+            let mut buf: [u8; 4] = [0; 4];
+            buf.copy_from_slice(&self.b[2..]);
+            u32::from_be_bytes(buf) as usize
+        } else {
+            self.b[2] as usize
+        }
+    }
+
+    pub fn encode_len(&self) -> usize {
+        ENCODER.encode_len(self.len())
+    }
+
+    pub fn encode(&self, encoded: &mut [u8]) {
+        if self.is_extended() {
+            // encode all 6 bytes
+            ENCODER.encode_mut(&self.b, encoded)
+        } else {
+            // only encode the first 3 bytes
+            ENCODER.encode_mut(&self.b[..3], encoded)
+        }
     }
 }
 
@@ -223,13 +258,16 @@ impl<T: AsRef<[u8]>> From<T> for Tag {
     fn from(v: T) -> Self {
         let mut tag = Tag::default();
         if v.as_ref().len() >= 6 {
-            tag.t.copy_from_slice(&v.as_ref()[..6]);
+            tag.b.copy_from_slice(&v.as_ref()[..6]);
         } else if v.as_ref().len() >= 3 {
-            tag.t[..3].copy_from_slice(&v.as_ref()[..3]);
+            tag.b[..3].copy_from_slice(&v.as_ref()[..3]);
         }
 
-        println!("{:08b} {:08b} {:08b} {:08b} {:08b} {:08b}",
-                 tag.t[0], tag.t[1], tag.t[2], tag.t[3], tag.t[4], tag.t[5]);
+        // encode the bytes
+        tag.update_encoding();
+
+        //println!("{:08b} {:08b} {:08b} {:08b} {:08b} {:08b}",
+        //         tag.t[0], tag.t[1], tag.t[2], tag.t[3], tag.t[4], tag.t[5]);
 
         tag
     }
@@ -347,10 +385,30 @@ impl FromStr for Tag {
                                                 return Err(Error::InvalidSubClass);
                                             }
                                         } else {
-                                            // the class is not experimental so it doesn't matter
-                                            // if the sub-class is experimental or not...just get
-                                            // the sub-sub-class number and return all three
-                                            if let Ok(ssc) = u8::from_str_radix(ssc_name, 10) {
+                                            // this is a standard class and standard sub-class
+                                            // without any standard sub-sub-classes so the
+                                            // sub-class must be experimental
+                                            if !experimental(*sc) {
+                                                // there is a special corner case to take into
+                                                // account here... both "undefined" ('_') and list
+                                                // ('-') are not considered experimental but we
+                                                // allow list.list, undefined.list, and
+                                                // undefined.undefined to have sub-sub-classes set
+                                                // so that user can have different kinds of these
+                                                // types
+                                                if (*c == idx('_') && (*sc == idx('_') || *sc == idx('-'))) ||
+                                                   (*c == idx('-') && *sc == idx('-')) {
+                                                       if let Ok(ssc) = u8::from_str_radix(ssc_name, 10) {
+                                                           (*c, *sc, ssc)
+                                                       } else {
+                                                           return Err(Error::InvalidSubSubClass);
+                                                       }
+                                                } else {
+                                                    return Err(Error::InvalidSubClass);
+                                                }
+                                            } else if let Ok(ssc) = u8::from_str_radix(ssc_name, 10) {
+                                                // the sub-class is experimental so just get the
+                                                // sub-sub-class number and return all three
                                                 (*c, *sc, ssc)
                                             } else {
                                                 // the sub-sub-class was not a base 10 number
@@ -468,16 +526,9 @@ impl FromStr for Tag {
                                 // ...the sub-class name is standard...
                                 match ssc_map {
                                     None => {
-                                        // the only valid possibilities for this case are:
-                                        // "undefined.undefined"
-                                        // "undefined.list"
-                                        // "list.list"
-                                        if (*c == idx('_') && (*sc == idx('_') || *sc == idx('-'))) ||
-                                           (*c == idx('-') && *sc == idx('-')) {
-                                            (*c, *sc, 0)
-                                        } else {
-                                            return Err(Error::InvalidSubSubClass);
-                                        }
+                                        // standard class and standard sub-class without any
+                                        // standard sub-sub-classes are allowed
+                                        (*c, *sc, 0)
                                     },
                                     Some(_) => {
                                         // if we get here, there is a sub-sub-class
