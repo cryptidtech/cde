@@ -1,6 +1,6 @@
 extern crate structopt;
 
-use cde::{ Error, ENCODER, Result, TagBuilder };
+use cde::{ CryptoData, Error, ENCODER, Result, TagBuilder };
 use log::*;
 use std::ffi::OsString;
 use std::fs::File;

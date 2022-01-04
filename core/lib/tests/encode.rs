@@ -1,4 +1,4 @@
-use cde::Tag;
+use cde::{CryptoData, Tag};
 use std::str::FromStr;
 
 #[test]

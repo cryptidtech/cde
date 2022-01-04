@@ -1,33 +1,28 @@
-#[macro_use] extern crate cde_codegen;
-use cde::{ ENCODER, CryptoData, CryptoDataTag, Tag };
-use rand::{ thread_rng, Rng };
+use cde::{ENCODER, CryptoData, Tag, TagBuilder};
+use rand::{thread_rng, Rng};
 
-//#[cde("key.ed25519.public")]
 struct Key {
-    data: [u8; 32]
-}
-
-let mut key_type_tag = Tag::from_str("key.ed25519.public").unwrap();
-
-impl<T: CryptoData> CryptoDataTag for Key {
-    fn as_str(&self) -> &str {
-        key_type_tag.set_length((self as T).get_length());
-        key_type_tag.as_str()
-    }
-
-    fn as_bytes(&self) -> &[u8] {
-        key_type_tag.set_length((self as T).get_length());
-        key_type_tag.as_bytes()
-    }
+    tag: Tag,
+    data: [u8; 32],
 }
 
 impl CryptoData for Key {
-    fn get_length(&self) -> usize {
+    fn len(&self) -> usize {
         32
     }
 
+    fn encode_len(&self) -> usize {
+        self.tag.encode_len() + ENCODER.encode_len(self.len())
+    }
+
     fn encode(&self, out: &mut [u8]) {
-        ENCODER.encode(&self.data, out);
+        if self.tag.is_extended() {
+            self.tag.encode(&mut out[..8]);
+            ENCODER.encode_mut(&self.data, &mut out[8..8+ENCODER.encode_len(self.len())]);
+        } else {
+            self.tag.encode(&mut out[..4]);
+            ENCODER.encode_mut(&self.data, &mut out[4..4+ENCODER.encode_len(self.len())]);
+        }
     }
 }
 
@@ -36,19 +31,17 @@ impl Key {
         let mut arr = [0u8; 32];
         thread_rng().try_fill(&mut arr[..]).unwrap();
         Key {
+            tag: TagBuilder::from_str("key.ed25519.secret").length(32).build().unwrap(),
             data: arr
         }
     }
-
 }
 
 fn main() {
     // generate a random key
-    let _k = Key::new();
-
-    let mut _b = [0u8; 47];
-
-
-    // encode the tag followed by the key data
-    //print!("{}{}", t.encode(), k.encode());
+    let k = Key::new();
+    let mut b = [0u8; 128];
+    k.encode(&mut b[..k.encode_len()]);
+    let s = core::str::from_utf8(&b[..k.encode_len()]).unwrap();
+    println!("{}", s);
 }

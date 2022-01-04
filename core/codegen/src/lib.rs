@@ -1,14 +1,16 @@
-extern crate proc_macro;
-use cde::Tag;
+//extern crate proc_macro;
+//use cde::Tag;
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as Ts2;
-use quote::{format_ident, quote};
-use std::str::FromStr;
-use syn::Error as SynError;
-use syn::{parse_macro_input, AttributeArgs, ItemStruct, NestedMeta, Lit/*, Meta*/};
+//use proc_macro2::TokenStream as Ts2;
+//use quote::{format_ident, quote};
+//use std::str::FromStr;
+//use syn::Error as SynError;
+//use syn::{parse_macro_input, AttributeArgs, ItemStruct, NestedMeta, Lit/*, Meta*/};
 
 #[proc_macro_attribute]
-pub fn cde(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn cde(_args: TokenStream, _item: TokenStream) -> TokenStream {
+    panic!("don't use this macro yet!");
+    /*
     let args2 = Ts2::from(args.clone());
     let mut ts = TokenStream::new();
     ts.extend(item.clone());
@@ -39,6 +41,7 @@ pub fn cde(args: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
+
     // generate the impl of TypedObject for the struct
     let ident = pitem.ident;
     let tt = s.value();
@@ -63,4 +66,5 @@ pub fn cde(args: TokenStream, item: TokenStream) -> TokenStream {
     let qs: TokenStream = gen.into();
     ts.extend(qs.into_iter());
     ts
+    */
 }

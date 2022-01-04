@@ -72,14 +72,6 @@ impl Tag {
         self.update_encoding();
     }
 
-    pub fn encode_len(&self) -> usize {
-        if self.is_extended() {
-            8
-        } else {
-            4
-        }
-    }
-
     pub fn as_bytes(&self) -> &[u8] {
         &self.b
     }
@@ -143,7 +135,7 @@ impl Tag {
 }
 
 impl CryptoData for Tag {
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         if self.is_extended() {
             let mut buf: [u8; 4] = [0; 4];
             buf.copy_from_slice(&self.b[2..]);
@@ -153,11 +145,11 @@ impl CryptoData for Tag {
         }
     }
 
-    pub fn encode_len(&self) -> usize {
+    fn encode_len(&self) -> usize {
         ENCODER.encode_len(self.len())
     }
 
-    pub fn encode(&self, encoded: &mut [u8]) {
+    fn encode(&self, encoded: &mut [u8]) {
         if self.is_extended() {
             // encode all 6 bytes
             ENCODER.encode_mut(&self.b, encoded)
@@ -598,13 +590,13 @@ impl Debug for Tag {
             writeln!(f, "{:06b} {:06b} {:06b} {:06b}  {:06b} {:06b} {:06b} {:06b}",
                         idx(c[0]), idx(c[1]), idx(c[2]), idx(c[3]), idx(c[4]), idx(c[5]), idx(c[6]), idx(c[7]))?;
             writeln!(f, "||   | ||   | || ||                                    |")?;
-            writeln!(f, "||   | ||   | || |+------------------------------------+.. len: {}", self.get_length())?;
+            writeln!(f, "||   | ||   | || |+------------------------------------+.. len: {}", self.len())?;
             writeln!(f, "||   | ||   | |+-+........................................ sub-sub-class: {}", sscn)?;
-            writeln!(f, "||   | ||   | +........................................... ext. length: {}", (idx(c[2]) > 31) as bool)?;
+            writeln!(f, "||   | ||   | +........................................... ext. length: {}", self.is_extended())?;
             writeln!(f, "||   | |+---+............................................. sub-class: {}", scn)?;
-            writeln!(f, "||   | +.................................................. exp. sub-class: {}", (idx(c[1]) > 31) as bool)?;
+            writeln!(f, "||   | +.................................................. exp. sub-class: {}", self.is_exp_sub_class())?;
             writeln!(f, "|+---+.................................................... class: {}", cn)?;
-            writeln!(f, "+......................................................... exp. class: {}", (idx(c[0]) > 31) as bool)?;
+            writeln!(f, "+......................................................... exp. class: {}", self.is_exp_class())?;
         } else {
             let c: [char; 4] = [i.next().unwrap(), i.next().unwrap(),
                                 i.next().unwrap(), i.next().unwrap()];
@@ -616,13 +608,13 @@ impl Debug for Tag {
             writeln!(f, "{:06b} {:06b} {:06b} {:06b}",
                         idx(c[0]), idx(c[1]), idx(c[2]), idx(c[3]))?;
             writeln!(f, "||   | ||   | || ||       |")?;
-            writeln!(f, "||   | ||   | || |+-------+.. len: {}", self.get_length())?;
+            writeln!(f, "||   | ||   | || |+-------+.. len: {}", self.len())?;
             writeln!(f, "||   | ||   | |+-+........... sub-sub-class: {}", sscn)?;
-            writeln!(f, "||   | ||   | +.............. ext. length: {}", (idx(c[2]) > 31) as bool)?;
+            writeln!(f, "||   | ||   | +.............. ext. length: {}", self.is_extended())?;
             writeln!(f, "||   | |+---+................ sub-class: {}", scn)?;
-            writeln!(f, "||   | +..................... exp. sub-class: {}", (idx(c[1]) > 31) as bool)?;
+            writeln!(f, "||   | +..................... exp. sub-class: {}", self.is_exp_sub_class())?;
             writeln!(f, "|+---+....................... class: {}", cn)?;
-            writeln!(f, "+............................ exp. class: {}", (idx(c[0]) > 31) as bool)?;
+            writeln!(f, "+............................ exp. class: {}", self.is_exp_class())?;
         }
         Ok(())
     }
