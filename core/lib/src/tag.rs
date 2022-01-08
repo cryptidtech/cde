@@ -1,6 +1,5 @@
-use crate::{idx, Error, CDE_ALPHABET, ENCODER, CryptoData, Result};
+use crate::{CDE_ALPHABET, CryptoData, ENCODER, Error, idx, Result, VarUInt};
 use std::fmt::{self, Debug, Display, Formatter};
-use std::str::FromStr;
 
 // include the generated hashmaps
 include!(concat!(env!("OUT_DIR"), "/hashmaps.rs"));
@@ -8,43 +7,27 @@ include!(concat!(env!("OUT_DIR"), "/hashmaps.rs"));
 static NUMBERS: &'static str = "0123456789";
 static UNDEFINED: &'static str = "undefined";
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Tag {
-    b: [u8; 6],
-    e: [u8; 8],
+    b: [u8; 2],
+    l: VarUInt,
 }
 
 impl Tag {
 
-    pub(crate) fn update_encoding(&mut self) {
-        if self.is_extended() {
-            // encode all 6 bytes
-            ENCODER.encode_mut(&self.b, &mut self.e)
-        } else {
-            // only encode the first 3 bytes
-            ENCODER.encode_mut(&self.b[..3], &mut self.e[..4])
-        }
+    pub(crate) fn new(b: &[u8]) -> Self {
+        let mut t = Tag::default();
+        t.b.copy_from_slice(&b[0..2]);
+        t.l = VarUInt::from(&b[2..]);
+        t
     }
 
-    pub fn is_extended(&self) -> bool {
-        (self.b[1] & 0x08) != 0
+    pub fn set_data_length(&mut self, len: u64) {
+        self.l = VarUInt::from(len);
     }
 
-    pub fn set_length(&mut self, len: u32) {
-        if len > 255 {
-            // store the length
-            self.b[2..].copy_from_slice(&len.to_be_bytes());
-
-            // set the extended length bit
-            self.b[1] |= 0x08;
-        } else {
-            // store the length
-            self.b[2] = len as u8;
-
-            // clear the extended length bit
-            self.b[1] &= 0xF7;
-        }
-        self.update_encoding();
+    pub fn get_data_length(&self) -> u64 {
+        self.l.into()
     }
 
     pub fn is_exp_class(&self) -> bool {
@@ -69,21 +52,6 @@ impl Tag {
         } else {
             self.b[0] &= 0xfd;
         }
-        self.update_encoding();
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.b
-    }
-
-    pub fn as_str(&self) -> &str {
-        if self.is_extended() {
-            // return the full 8 bytes as &str
-            core::str::from_utf8(&self.e).unwrap()
-        } else {
-            // only the first 4 bytes as &str
-            core::str::from_utf8(&self.e[..4]).unwrap()
-        }
     }
 
     pub fn name(&self) -> Result<(&str, &str, Option<&str>)> {
@@ -96,10 +64,8 @@ impl Tag {
                     //NOTE: due to a bug in the phf maps, we cannot use 0-indexing
                     //so we use 1-indexing instead as a work-around
                     if let Some(ssc) = ssc_map.get(&(n[2] + 1)) {
-                        println!("found sub-sub-class: {}", ssc);
                         return Ok((c, sc, Some(*ssc)));
                     } else {
-                        println!("using sub-sub-class number instead");
                         return Ok((c, sc, NUMBERS.get(i[2]..i[2]+1)));
                     }
                 } else {
@@ -130,148 +96,118 @@ impl Tag {
     }
 
     pub fn subsubclass(&self) -> u8 {
-        self.b[1] & 0x07
+        self.b[1] & 0x0f
     }
+
 }
 
 impl CryptoData for Tag {
     fn len(&self) -> usize {
-        if self.is_extended() {
-            let mut buf: [u8; 4] = [0; 4];
-            buf.copy_from_slice(&self.b[2..]);
-            u32::from_be_bytes(buf) as usize
-        } else {
-            self.b[2] as usize
-        }
+        2 + self.l.len()
+    }
+
+    fn bytes(&self, buf: &mut [u8]) -> usize {
+        buf[0..2].copy_from_slice(&self.b);
+        self.l.bytes(&mut buf[2..self.len()]);
+        self.len()
     }
 
     fn encode_len(&self) -> usize {
         ENCODER.encode_len(self.len())
     }
 
-    fn encode(&self, encoded: &mut [u8]) {
-        if self.is_extended() {
-            // encode all 6 bytes
-            ENCODER.encode_mut(&self.b, encoded)
-        } else {
-            // only encode the first 3 bytes
-            ENCODER.encode_mut(&self.b[..3], encoded)
-        }
+    fn encode(&self, buf: &mut [u8]) -> usize {
+        let mut b = [0u8; 9];
+        let len = self.bytes(&mut b);
+        ENCODER.encode_mut(&b[0..len], &mut buf[0..self.encode_len()]);
+        self.encode_len()
     }
 }
 
 enum TagBuildFrom {
-    Str,
-    Byt
+    Tag,
+    Bytes,
+    Encoded,
 }
 
 pub struct TagBuilder<'a> {
     how: TagBuildFrom,
-    s: Option<&'a str>,
-    b: Option<&'a [u8]>,
-    l: u32
+    tag: Option<&'a str>,
+    bytes: Option<&'a [u8]>,
 }
 
-impl Default for TagBuilder<'_> {
-    fn default() -> Self {
-        TagBuilder {
-            how: TagBuildFrom::Str,
-            s: None,
-            b: None,
-            l: 0u32,
-        }
-    }
-}
+// create a tag in the provided buffer copying from the bytes slice
+// let tt = TagBuilder::from_bytes(&bytes).build().unwrap();
+//
+// create a tag in the provided buffer from the type string
+// let tt = TagBuilder::from_tag("key.p256.secret").build().unwrap();
 
 impl<'a> TagBuilder<'a> {
-    pub fn from_str(s: &'a str) -> Self {
+    pub fn from_tag(s: &'a str) -> Self {
         TagBuilder {
-            how: TagBuildFrom::Str,
-            s: Some(s),
-            b: None,
-            l: 0u32,
+            how: TagBuildFrom::Tag,
+            tag: Some(s),
+            bytes: None,
         }
     }
 
     pub fn from_bytes(b: &'a [u8]) -> Self {
         TagBuilder {
-            how: TagBuildFrom::Byt,
-            s: None,
-            b: Some(b),
-            l: 0u32,
+            how: TagBuildFrom::Bytes,
+            tag: None,
+            bytes: Some(b),
         }
     }
 
-    pub fn length(mut self, l: u32) -> Self {
-        self.l = l;
-        self
+    pub fn from_encoded(e: &'a [u8]) -> Self {
+        TagBuilder {
+            how: TagBuildFrom::Encoded,
+            tag: None,
+            bytes: Some(e),
+        }
     }
 
-    pub fn build(self) -> Result<Tag>  {
-        let mut tag = match self.how {
-            TagBuildFrom::Str => {
-                match self.s {
-                    None => return Err(Error::TagFromStr),
-                    Some(s) =>  {
-                        Tag::from_str(s)?
-                    }
+    pub fn build(&self) -> Result<Tag>  {
+        let mut buf = [0u8; 9];
+        let tag = match self.how {
+            TagBuildFrom::Tag => {
+                if let Some(tag) = self.tag {
+                    TagBuilder::decode_str(tag, &mut buf)?;
+                    Tag::new(&buf)
+                } else {
+                    return Err(Error::FromStr);
                 }
             },
-            TagBuildFrom::Byt => {
-                match self.b {
-                    None => return Err(Error::TagFromBytes),
-                    Some(s) => {
-                        Tag::from(s)
+            TagBuildFrom::Bytes => {
+                if let Some(bytes) = self.bytes {
+                    Tag::new(&bytes)
+                } else {
+                    return Err(Error::FromBytes);
+                }
+            },
+            TagBuildFrom::Encoded => {
+                if let Some(bytes) = self.bytes {
+                    ENCODER.decode_mut(&bytes[0..4], &mut buf[0..3]).map_err(|_| Error::DecodeError)?;
+                    if (buf[2] & 0x80) != 0 {
+                        ENCODER.decode_mut(&bytes[4..8], &mut buf[3..6]).map_err(|_| Error::DecodeError)?;
                     }
+                    if (buf[5] & 0x80) != 0 {
+                        ENCODER.decode_mut(&bytes[8..12], &mut buf[6..9]).map_err(|_| Error::DecodeError)?;
+                    }
+                    Tag::new(&buf)
+                } else {
+                    return Err(Error::DecodeError);
                 }
             }
         };
 
-        tag.set_length(self.l);
         Ok(tag)
     }
-}
-
-impl Display for Tag {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if let Ok((c, sc, ssc)) = self.name() {
-            if let Some(ssc) = ssc {
-                write!(f, "{}.{}.{}", c, sc, ssc)
-            } else {
-                write!(f, "{}.{}", c, sc)
-            }
-        } else {
-            Err(core::fmt::Error)
-        }
-    }
-}
-
-impl<T: AsRef<[u8]>> From<T> for Tag {
-    fn from(v: T) -> Self {
-        let mut tag = Tag::default();
-        if v.as_ref().len() >= 6 {
-            tag.b.copy_from_slice(&v.as_ref()[..6]);
-        } else if v.as_ref().len() >= 3 {
-            tag.b[..3].copy_from_slice(&v.as_ref()[..3]);
-        }
-
-        // encode the bytes
-        tag.update_encoding();
-
-        //println!("{:08b} {:08b} {:08b} {:08b} {:08b} {:08b}",
-        //         tag.t[0], tag.t[1], tag.t[2], tag.t[3], tag.t[4], tag.t[5]);
-
-        tag
-    }
-}
-
-impl FromStr for Tag {
-    type Err = Error;
 
     /// This takes a tag string name like "key.ed25519.public" and parses it
     /// into a Tag containing the correct class, sub-class, and sub-sub-class
     /// values. The length is initiatlized to zero.
-    fn from_str(tag: &str) -> Result<Self> {
+    fn decode_str(tag: &str, buf: &mut [u8]) -> Result<()> {
 
         // checks if the value is experimental
         fn experimental(v: u8) -> bool {
@@ -300,7 +236,6 @@ impl FromStr for Tag {
 
         let (c, sc, ssc) = match parts {
             (Some(c_name), Some(sc_name), Some(ssc_name)) => {
-                //println!("have {}, {}, {}...", c_name, sc_name, ssc_name);
                 match VALUES.get(c_name) {
                     None => {
                         if let Some(c) = name_or_char(c_name) {
@@ -461,7 +396,6 @@ impl FromStr for Tag {
             },
 
             (Some(c_name), Some(sc_name), None) => {
-                //println!("have {}, {}...", c_name, sc_name);
                 match VALUES.get(c_name) {
                     None => {
                         // the class is non-standard...
@@ -547,28 +481,34 @@ impl FromStr for Tag {
             },
 
             // everything other combination is invalid...
-            _ => return Err(Error::TagFromStr),
+            _ => return Err(Error::FromStr),
         };
 
-        //println!("have values: {}, {}, {}...", c, sc, ssc);
+        buf[0] = (((c & 0x3f) << 2) & 0xfc) | (((sc & 0x30) >> 4) & 0x03);
+        buf[1] = (((sc & 0x0f) << 4) & 0xf0) | (ssc & 0x07);
+        buf[2] = 0;
 
-        // pack the type values into a byte buffer
-        let buf: [u8; 3] = [
-            ((((c & 0x3f) << 2) & 0xfc) | (((sc & 0x30) >> 4) & 0x03)),
-            ((((sc & 0x0f) << 4) & 0xf0) | (ssc & 0x07)),
-            0
-        ];
+        Ok(())
+    }
+}
 
-        //println!("{:08b} {:08b} {:08b}", buf[0], buf[1], buf[2]);
-
-        // construct the tag from the bytes
-        Ok(Tag::from(buf))
+impl Display for Tag {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if let Ok((c, sc, ssc)) = self.name() {
+            if let Some(ssc) = ssc {
+                write!(f, "{}.{}.{}", c, sc, ssc)
+            } else {
+                write!(f, "{}.{}", c, sc)
+            }
+        } else {
+            Err(core::fmt::Error)
+        }
     }
 }
 
 impl Debug for Tag {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let mut b = [0u8; 8];
+        let mut b = [0u8; 12];
         self.encode(&mut b);
         let s = core::str::from_utf8(&mut b).unwrap();
         let mut i = s.chars();
@@ -577,49 +517,73 @@ impl Debug for Tag {
             None => "None",
             Some(sscn) => sscn
         };
-        if self.is_extended() {
-            let c: [char; 8] = [i.next().unwrap(), i.next().unwrap(),
-                                i.next().unwrap(), i.next().unwrap(), 
-                                i.next().unwrap(), i.next().unwrap(),
-                                i.next().unwrap(), i.next().unwrap()];
+        match self.len() {
+            3 => {
+                let c: [char; 4] = [i.next().unwrap(), i.next().unwrap(),
+                                    i.next().unwrap(), i.next().unwrap()];
 
-            writeln!(f, "       encoding unit 1          optional encoding unit 2")?;
-            writeln!(f, " /--------------------------/ /--------------------------/")?;
-            writeln!(f, "/--{}--//--{}--//--{}--//--{}--/ /--{}--//--{}--//--{}--//--{}--/",
-                        c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7])?;
-            writeln!(f, "{:06b} {:06b} {:06b} {:06b}  {:06b} {:06b} {:06b} {:06b}",
-                        idx(c[0]), idx(c[1]), idx(c[2]), idx(c[3]), idx(c[4]), idx(c[5]), idx(c[6]), idx(c[7]))?;
-            writeln!(f, "||   | ||   | || ||                                    |")?;
-            writeln!(f, "||   | ||   | || |+------------------------------------+.. len: {}", self.len())?;
-            writeln!(f, "||   | ||   | |+-+........................................ sub-sub-class: {}", sscn)?;
-            writeln!(f, "||   | ||   | +........................................... ext. length: {}", self.is_extended())?;
-            writeln!(f, "||   | |+---+............................................. sub-class: {}", scn)?;
-            writeln!(f, "||   | +.................................................. exp. sub-class: {}", self.is_exp_sub_class())?;
-            writeln!(f, "|+---+.................................................... class: {}", cn)?;
-            writeln!(f, "+......................................................... exp. class: {}", self.is_exp_class())?;
-        } else {
-            let c: [char; 4] = [i.next().unwrap(), i.next().unwrap(),
-                                i.next().unwrap(), i.next().unwrap()];
+                writeln!(f, "       encoding unit 1")?;
+                writeln!(f, " /--------------------------/")?;
+                writeln!(f, "/--{}--//--{}--//--{}--//--{}--/",
+                            c[0], c[1], c[2], c[3])?;
+                writeln!(f, "{:06b} {:06b} {:06b} {:06b}",
+                            idx(c[0]), idx(c[1]), idx(c[2]), idx(c[3]))?;
+                writeln!(f, "||   | ||   | |  ||       |")?;
+                writeln!(f, "||   | ||   | |  |+-------+.. len: {}", self.get_data_length())?;
+                writeln!(f, "||   | ||   | +--+........... sub-sub-class: {}", sscn)?;
+                writeln!(f, "||   | |+---+................ sub-class: {}", scn)?;
+                writeln!(f, "||   | +..................... exp. sub-class: {}", self.is_exp_sub_class())?;
+                writeln!(f, "|+---+....................... class: {}", cn)?;
+                writeln!(f, "+............................ exp. class: {}", self.is_exp_class())?;
+            },
+            6 => {
+                let c: [char; 8] = [i.next().unwrap(), i.next().unwrap(),
+                                    i.next().unwrap(), i.next().unwrap(),
+                                    i.next().unwrap(), i.next().unwrap(),
+                                    i.next().unwrap(), i.next().unwrap()];
 
-            writeln!(f, "       encoding unit 1")?;
-            writeln!(f, " /--------------------------/")?;
-            writeln!(f, "/--{}--//--{}--//--{}--//--{}--/",
-                        c[0], c[1], c[2], c[3])?;
-            writeln!(f, "{:06b} {:06b} {:06b} {:06b}",
-                        idx(c[0]), idx(c[1]), idx(c[2]), idx(c[3]))?;
-            writeln!(f, "||   | ||   | || ||       |")?;
-            writeln!(f, "||   | ||   | || |+-------+.. len: {}", self.len())?;
-            writeln!(f, "||   | ||   | |+-+........... sub-sub-class: {}", sscn)?;
-            writeln!(f, "||   | ||   | +.............. ext. length: {}", self.is_extended())?;
-            writeln!(f, "||   | |+---+................ sub-class: {}", scn)?;
-            writeln!(f, "||   | +..................... exp. sub-class: {}", self.is_exp_sub_class())?;
-            writeln!(f, "|+---+....................... class: {}", cn)?;
-            writeln!(f, "+............................ exp. class: {}", self.is_exp_class())?;
+                writeln!(f, "       encoding unit 1          optional encoding unit 2")?;
+                writeln!(f, " /--------------------------/ /--------------------------/")?;
+                writeln!(f, "/--{}--//--{}--//--{}--//--{}--/ /--{}--//--{}--//--{}--//--{}--/",
+                            c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7])?;
+                writeln!(f, "{:06b} {:06b} {:06b} {:06b}  {:06b} {:06b} {:06b} {:06b}",
+                            idx(c[0]), idx(c[1]), idx(c[2]), idx(c[3]), idx(c[4]), idx(c[5]), idx(c[6]), idx(c[7]))?;
+                writeln!(f, "||   | ||   | |  ||                                    |")?;
+                writeln!(f, "||   | ||   | |  |+-------+--+-------++-------++-------+")?;
+                writeln!(f, "||   | ||   | |  |        |.. len: {}", self.get_data_length())?;
+                writeln!(f, "||   | ||   | +--+........... sub-sub-class: {}", sscn)?;
+                writeln!(f, "||   | |+---+................ sub-class: {}", scn)?;
+                writeln!(f, "||   | +..................... exp. sub-class: {}", self.is_exp_sub_class())?;
+                writeln!(f, "|+---+....................... class: {}", cn)?;
+                writeln!(f, "+............................ exp. class: {}", self.is_exp_class())?;
+            },
+            9 => {
+                let c: [char; 12] = [i.next().unwrap(), i.next().unwrap(),
+                                     i.next().unwrap(), i.next().unwrap(),
+                                     i.next().unwrap(), i.next().unwrap(),
+                                     i.next().unwrap(), i.next().unwrap(),
+                                     i.next().unwrap(), i.next().unwrap(),
+                                     i.next().unwrap(), i.next().unwrap()];
+
+                writeln!(f, "       encoding unit 1          optional encoding unit 2     optional encoding unit 3")?;
+                writeln!(f, " /--------------------------/ /--------------------------/ /--------------------------/")?;
+                writeln!(f, "/--{}--//--{}--//--{}--//--{}--/ /--{}--//--{}--//--{}--//--{}--/ /--{}--//--{}--//--{}--//--{}--/",
+                            c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11])?;
+                writeln!(f, "{:06b} {:06b} {:06b} {:06b}  {:06b} {:06b} {:06b} {:06b}  {:06b} {:06b} {:06b} {:06b}",
+                            idx(c[0]), idx(c[1]), idx(c[2]), idx(c[3]),
+                            idx(c[4]), idx(c[5]), idx(c[6]), idx(c[7]),
+                            idx(c[8]), idx(c[9]), idx(c[10]), idx(c[11]))?;
+                writeln!(f, "||   | ||   | |  ||                                                                  |")?;
+                writeln!(f, "||   | ||   | |  |+-------+--+-------++-------++-------++--------++--------++--------+")?;
+                writeln!(f, "||   | ||   | |  |        |.. len: {}", self.get_data_length())?;
+                writeln!(f, "||   | ||   | +--+........... sub-sub-class: {}", sscn)?;
+                writeln!(f, "||   | |+---+................ sub-class: {}", scn)?;
+                writeln!(f, "||   | +..................... exp. sub-class: {}", self.is_exp_sub_class())?;
+                writeln!(f, "|+---+....................... class: {}", cn)?;
+                writeln!(f, "+............................ exp. class: {}", self.is_exp_class())?;
+            },
+            _ => { return Err(fmt::Error); },
         }
         Ok(())
     }
-}
-
-
-mod tests {
 }

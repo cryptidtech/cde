@@ -24,10 +24,12 @@ pub enum Error {
     NonExperimentalParentType(u8),
     #[error("invalid non-ascii type name")]
     InvalidTypeName,
-    #[error("failed to build tag from str")]
-    TagFromStr,
-    #[error("failed to build tag from bytes")]
-    TagFromBytes,
+    #[error("failed to build from str")]
+    FromStr,
+    #[error("failed to build from bytes")]
+    FromBytes,
+    #[error("no buffer given")]
+    MissingBuf,
     #[error("decode error")]
     DecodeError,
 }
@@ -55,11 +57,31 @@ pub fn ch(i: u8) -> char {
     }
 }
 
+pub fn decode_tag_and_data<'a, T: From<&'a [u8]>>(encoded: &[u8], buf: &'a mut [u8]) -> Result<(Tag, T)> {
+    let len = ENCODER.decode_len(encoded.len()).map_err(|_| Error::DecodeError)?;
+    ENCODER.decode_mut(encoded, &mut buf[0..len]).map_err(|_| Error::DecodeError)?;
+    let tag = TagBuilder::from_bytes(&buf).build()?;
+    let len = tag.len();
+    let data_len = tag.get_data_length() as usize;
+    let data = T::from(&buf[len..len + data_len]);
+    Ok((tag, data))
+}
+
+pub fn encode_tag_and_data<'a>(tag: &mut Tag, data: &impl CryptoData, buf: &'a mut [u8]) -> Result<usize> {
+    tag.set_data_length(data.len() as u64);
+    let tagsize = tag.encode(buf);
+    let datasize = data.encode(&mut buf[tagsize..]);
+    Ok(tagsize + datasize)
+}
+
 pub trait CryptoData {
     fn len(&self) -> usize;
+    fn bytes(&self, buf: &mut [u8]) -> usize;
     fn encode_len(&self) -> usize;
-    fn encode(&self, encoded: &mut [u8]);
+    fn encode(&self, buf: &mut [u8]) -> usize;
 }
 
 mod tag;
 pub use tag::*;
+mod varuint;
+pub use varuint::*;

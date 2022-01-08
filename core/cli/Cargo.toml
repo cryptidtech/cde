@@ -1,6 +1,6 @@
 [package]
 name = "cde_cli"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Dave Huseby <dave@cryptid.tech>"]
 description = "A CLI utility for encoding/decoding using CDE"
 documentation = "https://docs.rs/cde"
@@ -15,3 +15,4 @@ anyhow = "1.0"
 log = "0.4"
 stderrlog = "0.5"
 structopt = "0.3"
+tempfile = "3.3"

@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             .entry(idx('c'), "(\"claim\", &NAMES_CLAIM)")
             .entry(idx('d'), "(\"digest\", &NAMES_DIGEST)")
             .entry(idx('e'), "(\"encryption\", &NAMES_ENCRYPTION)")
+            .entry(idx('f'), "(\"strobe\", &NAMES_STROBE)")
             .entry(idx('h'), "(\"hmac\", &NAMES_HMAC)")
             .entry(idx('i'), "(\"identifier\", &NAMES_IDENTIFIER)")
             .entry(idx('k'), "(\"key\", &NAMES_KEY)")
@@ -44,6 +45,7 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             .entry(idx('C'), "(\"Claim\", &NAMES_CLAIM)")
             .entry(idx('D'), "(\"Digest\", &NAMES_DIGEST)")
             .entry(idx('E'), "(\"Encryption\", &NAMES_ENCRYPTION)")
+            .entry(idx('F'), "(\"Strobe\", &NAMES_STROBE)")
             .entry(idx('H'), "(\"Hmac\", &NAMES_HMAC)")
             .entry(idx('I'), "(\"Identifier\", &NAMES_IDENTIFIER)")
             .entry(idx('K'), "(\"Key\", &NAMES_KEY)")
@@ -167,6 +169,56 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                     .entry(1, "\"256\"")
                     .entry(2, "\"128\"")
                     .entry(3, "\"192\"")
+                    .build()
+            )?;
+
+        writeln!(
+            &mut file,
+            "static NAMES_STROBE: SubNamesMap = \n{};\n\n",
+            phf_codegen::OrderedMap::new()
+                .entry(idx('_'), "(\"undefined\", None)")
+                .entry(idx('-'), "(\"list\", None)")
+                .entry(idx('a'), "(\"ad\", None)")
+                .entry(idx('c'), "(\"clr\", Some(&NAMES_STROBE_CLR))")
+                .entry(idx('e'), "(\"enc\", Some(&NAMES_STROBE_ENC))")
+                .entry(idx('k'), "(\"key\", None)")
+                .entry(idx('m'), "(\"mac\", Some(&NAMES_STROBE_MAC))")
+                .entry(idx('p'), "(\"prf\", None)")
+                .entry(idx('r'), "(\"ratchet\", None)")
+                .entry(idx('A'), "(\"Ad\", None)")
+                .entry(idx('C'), "(\"Clr\", Some(&NAMES_STROBE_CLR))")
+                .entry(idx('E'), "(\"Enc\", Some(&NAMES_STROBE_ENC))")
+                .entry(idx('K'), "(\"Key\", None)")
+                .entry(idx('M'), "(\"Mac\", Some(&NAMES_STROBE_MAC))")
+                .entry(idx('P'), "(\"Prf\", None)")
+                .entry(idx('R'), "(\"Ratchet\", None)")
+                .build()
+        )?;
+
+            writeln!(
+                &mut file,
+                "static NAMES_STROBE_CLR: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"send\"")
+                    .entry(2, "\"recv\"")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static NAMES_STROBE_ENC: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"send\"")
+                    .entry(2, "\"recv\"")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static NAMES_STROBE_MAC: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"send\"")
+                    .entry(2, "\"recv\"")
                     .build()
             )?;
 
@@ -365,6 +417,7 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             .entry("claim", "(2, &VALUES_CLAIM)")
             .entry("digest", "(3, &VALUES_DIGEST)")
             .entry("encryption", "(4, &VALUES_ENCRYPTION)")
+            .entry("strobe", "(5, &VALUES_STROBE)")
             .entry("hmac", "(7, &VALUES_HMAC)")
             .entry("identifier", "(8, &VALUES_IDENTIFIER)")
             .entry("key", "(10, &VALUES_KEY)")
@@ -378,6 +431,7 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             .entry("Claim", "(34, &VALUES_CLAIM)")
             .entry("Digest", "(35, &VALUES_DIGEST)")
             .entry("Encryption", "(36, &VALUES_ENCRYPTION)")
+            .entry("Strobe", "(37, &VALUES_STROBE)")
             .entry("Hmac", "(39, &VALUES_HMAC)")
             .entry("Identifier", "(40, &VALUES_IDENTIFIER)")
             .entry("Key", "(42, &VALUES_KEY)")
@@ -392,16 +446,16 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_AEAD: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("undefined", "(63, None)")
-                .entry("list", "(31, None)")
-                .entry("aes256-gcm", "(0, None)")
-                .entry("chacha20-poly1305", "(2, None)")
-                .entry("chacha20-poly1305-ietf", "(8, None)")
-                .entry("xchacha20-poly1305-ietf", "(23, None)")
-                .entry("Aes256-gcm", "(32, None)")
-                .entry("Chacha20-poly1305", "(34, None)")
-                .entry("Chacha20-poly1305-ietf", "(40, None)")
-                .entry("Xchacha20-poly1305-ietf", "(55, None)")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("aes256-gcm", format!("({}, None)", idx('a')).as_str())
+                .entry("chacha20-poly1305", format!("({}, None)", idx('c')).as_str())
+                .entry("chacha20-poly1305-ietf", format!("({}, None)", idx('i')).as_str())
+                .entry("xchacha20-poly1305-ietf", format!("({}, None)", idx('x')).as_str())
+                .entry("Aes256-gcm", format!("({}, None)", idx('A')).as_str())
+                .entry("Chacha20-poly1305", format!("({}, None)", idx('C')).as_str())
+                .entry("Chacha20-poly1305-ietf", format!("({}, None)", idx('I')).as_str())
+                .entry("Xchacha20-poly1305-ietf", format!("({}, None)", idx('X')).as_str())
                 .build()
         )?;
 
@@ -409,10 +463,10 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_CLAIM: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("undefined", "(63, None)")
-                .entry("list", "(31, None)")
-                .entry("oberon", "(14, None)")
-                .entry("Oberon", "(46, None)")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("oberon", format!("({}, None)", idx('o')).as_str())
+                .entry("Oberon", format!("({}, None)", idx('O')).as_str())
                 .build()
         )?;
 
@@ -420,18 +474,18 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_DIGEST: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("undefined", "(63, None)")
-                .entry("list", "(31, None)")
-                .entry("blake2", "(1, Some(&VALUES_DIGEST_BLAKE2))")
-                .entry("md", "(12, Some(&VALUES_DIGEST_MD))")
-                .entry("sha1", "(18, None)")
-                .entry("sha2", "(7, Some(&VALUES_DIGEST_SHA2))")
-                .entry("sha3", "(0, Some(&VALUES_DIGEST_SHA3))")
-                .entry("Blake2", "(33, Some(&VALUES_DIGEST_BLAKE2))")
-                .entry("Md", "(44, Some(&VALUES_DIGEST_MD))")
-                .entry("Sha1", "(50, None)")
-                .entry("Sha2", "(39, Some(&VALUES_DIGEST_SHA2))")
-                .entry("Sha3", "(32, Some(&VALUES_DIGEST_SHA3))")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("blake2", format!("({}, Some(&VALUES_DIGEST_BLAKE2))", idx('b')).as_str())
+                .entry("md", format!("({}, Some(&VALUES_DIGEST_MD))", idx('m')).as_str())
+                .entry("sha1", format!("({}, None)", idx('s')).as_str())
+                .entry("sha2", format!("({}, Some(&VALUES_DIGEST_SHA2))", idx('h')).as_str())
+                .entry("sha3", format!("({}, Some(&VALUES_DIGEST_SHA3))", idx('a')).as_str())
+                .entry("Blake2", format!("({}, Some(&VALUES_DIGEST_BLAKE2))", idx('B')).as_str())
+                .entry("Md", format!("({}, Some(&VALUES_DIGEST_MD))", idx('M')).as_str())
+                .entry("Sha1", format!("({}, None)", idx('S')).as_str())
+                .entry("Sha2", format!("({}, Some(&VALUES_DIGEST_SHA2))", idx('H')).as_str())
+                .entry("Sha3", format!("({}, Some(&VALUES_DIGEST_SHA3))", idx('A')).as_str())
                 .build()
         )?;
 
@@ -485,12 +539,12 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_ENCRYPTION: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("undefined", "(63, None)")
-                .entry("list", "(31, None)")
-                .entry("aes", "(0, Some(&VALUES_CIPHER_AES))")
-                .entry("xchacha20", "(23, None)")
-                .entry("Aes", "(32, Some(&VALUES_CIPHER_AES))")
-                .entry("Xchacha20", "(55, None)")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("aes", format!("({}, Some(&VALUES_CIPHER_AES))", idx('a')).as_str())
+                .entry("xchacha20", format!("({}, None)", idx('x')).as_str())
+                .entry("Aes", format!("({}, Some(&VALUES_CIPHER_AES))", idx('A')).as_str())
+                .entry("Xchacha20", format!("({}, None)", idx('X')).as_str())
                 .build()
         )?;
 
@@ -506,9 +560,59 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
 
         writeln!(
             &mut file,
+            "static VALUES_STROBE: SubValuesMap = \n{};\n\n",
+            phf_codegen::OrderedMap::new()
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("ad", format!("({}, None)", idx('a')).as_str())
+                .entry("clr", format!("({}, Some(&VALUES_STROBE_CLR))", idx('c')).as_str())
+                .entry("enc", format!("({}, Some(&VALUES_STROBE_ENC))", idx('e')).as_str())
+                .entry("key", format!("({}, None)", idx('k')).as_str())
+                .entry("mac", format!("({}, Some(&VALUES_STROBE_MAC))", idx('m')).as_str())
+                .entry("prf", format!("({}, None)", idx('p')).as_str())
+                .entry("ratchet", format!("({}, None)", idx('r')).as_str())
+                .entry("Ad", format!("({}, None)", idx('A')).as_str())
+                .entry("Clr", format!("({}, Some(&VALUES_STROBE_CLR))", idx('C')).as_str())
+                .entry("Enc", format!("({}, Some(&VALUES_STROBE_ENC))", idx('E')).as_str())
+                .entry("Key", format!("({}, None)", idx('K')).as_str())
+                .entry("Mac", format!("({}, Some(&VALUES_STROBE_MAC))", idx('M')).as_str())
+                .entry("Prf", format!("({}, None)", idx('P')).as_str())
+                .entry("Ratchet", format!("({}, None)", idx('R')).as_str())
+                .build()
+        )?;
+
+            writeln!(
+                &mut file,
+                "static VALUES_STROBE_CLR: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("send", "1")
+                    .entry("recv", "2")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static VALUES_STROBE_ENC: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("send", "1")
+                    .entry("recv", "2")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static VALUES_STROBE_MAC: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("send", "1")
+                    .entry("recv", "2")
+                    .build()
+            )?;
+
+        writeln!(
+            &mut file,
             "static VALUES_HMAC: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("list", "(31, None)")
+                .entry("list", format!("({}, None)", idx('-')).as_str())
                 .build()
         )?;
 
@@ -516,14 +620,14 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_IDENTIFIER: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("undefined", "(63, None)")
-                .entry("list", "(31, None)")
-                .entry("adi", "(0, None)")
-                .entry("did", "(3, None)")
-                .entry("email", "(4, None)")
-                .entry("Adi", "(32, None)")
-                .entry("Did", "(35, None)")
-                .entry("Email", "(36, None)")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("adi", format!("({}, None)", idx('a')).as_str())
+                .entry("did", format!("({}, None)", idx('d')).as_str())
+                .entry("email", format!("({}, None)", idx('e')).as_str())
+                .entry("Adi", format!("({}, None)", idx('A')).as_str())
+                .entry("Did", format!("({}, None)", idx('D')).as_str())
+                .entry("Email", format!("({}, None)", idx('E')).as_str())
                 .build()
         )?;
 
@@ -531,24 +635,24 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_KEY: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("undefined", "(63, None)")
-                .entry("list", "(31, None)")
-                .entry("ed25519", "(4, Some(&VALUES_KEY_ED25519))")
-                .entry("x25519", "(23, Some(&VALUES_KEY_X25519))")
-                .entry("rsa", "(17, Some(&VALUES_KEY_RSA))")
-                .entry("bls12381", "(1, Some(&VALUES_KEY_BLS12381))")
-                .entry("k256", "(10, Some(&VALUES_KEY_K256))")
-                .entry("p256", "(15, Some(&VALUES_KEY_P256))")
-                .entry("xchacha20", "(2, None)")
-                .entry("aes", "(0, Some(&VALUES_KEY_AES))")
-                .entry("Ed25519", "(36, Some(&VALUES_KEY_ED25519))")
-                .entry("X25519", "(55, Some(&VALUES_KEY_X25519))")
-                .entry("Rsa", "(49, Some(&VALUES_KEY_RSA))")
-                .entry("Bls12381", "(33, Some(&VALUES_KEY_BLS12381))")
-                .entry("K256", "(42, Some(&VALUES_KEY_K256))")
-                .entry("P256", "(47, Some(&VALUES_KEY_P256))")
-                .entry("Xchacha20", "(34, None)")
-                .entry("Aes", "(32, Some(&VALUES_KEY_AES))")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("ed25519", format!("({}, Some(&VALUES_KEY_ED25519))", idx('e')).as_str())
+                .entry("x25519", format!("({}, Some(&VALUES_KEY_X25519))", idx('x')).as_str())
+                .entry("rsa", format!("({}, Some(&VALUES_KEY_RSA))", idx('r')).as_str())
+                .entry("bls12381", format!("({}, Some(&VALUES_KEY_BLS12381))", idx('b')).as_str())
+                .entry("k256", format!("({}, Some(&VALUES_KEY_K256))", idx('k')).as_str())
+                .entry("p256", format!("({}, Some(&VALUES_KEY_P256))", idx('p')).as_str())
+                .entry("xchacha20", format!("({}, None)", idx('c')).as_str())
+                .entry("aes", format!("({}, Some(&VALUES_KEY_AES))", idx('a')).as_str())
+                .entry("Ed25519", format!("({}, Some(&VALUES_KEY_ED25519))", idx('E')).as_str())
+                .entry("X25519", format!("({}, Some(&VALUES_KEY_X25519))", idx('X')).as_str())
+                .entry("Rsa", format!("({}, Some(&VALUES_KEY_RSA))", idx('R')).as_str())
+                .entry("Bls12381", format!("({}, Some(&VALUES_KEY_BLS12381))", idx('B')).as_str())
+                .entry("K256", format!("({}, Some(&VALUES_KEY_K256))", idx('K')).as_str())
+                .entry("P256", format!("({}, Some(&VALUES_KEY_P256))", idx('P')).as_str())
+                .entry("Xchacha20", format!("({}, None)", idx('C')).as_str())
+                .entry("Aes", format!("({}, Some(&VALUES_KEY_AES))", idx('A')).as_str())
                 .build()
         )?;
 
@@ -619,7 +723,7 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_NONCE: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("list", "(31, None)")
+                .entry("list", format!("({}, None)", idx('-')).as_str())
                 .build()
         )?;
 
@@ -627,12 +731,12 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_POLICY: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("undefined", "(63, None)")
-                .entry("list", "(31, None)")
-                .entry("bitcoin", "(1, None)")
-                .entry("solidity", "(18, None)")
-                .entry("Bitcoin", "(33, None)")
-                .entry("Solidity", "(50, None)")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("bitcoin", format!("({}, None)", idx('b')).as_str())
+                .entry("solidity", format!("({}, None)", idx('s')).as_str())
+                .entry("Bitcoin", format!("({}, None)", idx('B')).as_str())
+                .entry("Solidity", format!("({}, None)", idx('S')).as_str())
                 .build()
         )?;
 
@@ -640,16 +744,16 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_SIGNATURE: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("undefined", "(63, None)")
-                .entry("list", "(31, None)")
-                .entry("minisign", "(12, None)")
-                .entry("openssl", "(14, None)")
-                .entry("pgp", "(15, None)")
-                .entry("x509", "(23, None)")
-                .entry("Minisign", "(44, None)")
-                .entry("Openssl", "(46, None)")
-                .entry("Pgp", "(47, None)")
-                .entry("X509", "(55, None)")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("minisign", format!("({}, None)", idx('m')).as_str())
+                .entry("openssl", format!("({}, None)", idx('o')).as_str())
+                .entry("pgp", format!("({}, None)", idx('p')).as_str())
+                .entry("x509", format!("({}, None)", idx('x')).as_str())
+                .entry("Minisign", format!("({}, None)", idx('M')).as_str())
+                .entry("Openssl", format!("({}, None)", idx('O')).as_str())
+                .entry("Pgp", format!("({}, None)", idx('P')).as_str())
+                .entry("X509", format!("({}, None)", idx('X')).as_str())
                 .build()
         )?;
 
@@ -657,14 +761,14 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_TIMESTAMP: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("undefined", "(63, None)")
-                .entry("list", "(31, None)")
-                .entry("bitcoin", "(1, None)")
-                .entry("iso8601", "(8, None)")
-                .entry("unix", "(20, None)")
-                .entry("Bitcoin", "(33, None)")
-                .entry("Iso8601", "(40, None)")
-                .entry("Unix", "(52, None)")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
+                .entry("bitcoin", format!("({}, None)", idx('b')).as_str())
+                .entry("iso8601", format!("({}, None)", idx('i')).as_str())
+                .entry("unix", format!("({}, None)", idx('u')).as_str())
+                .entry("Bitcoin", format!("({}, None)", idx('B')).as_str())
+                .entry("Iso8601", format!("({}, None)", idx('I')).as_str())
+                .entry("Unix", format!("({}, None)", idx('U')).as_str())
                 .build()
         )?;
 
@@ -672,7 +776,7 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_LIST: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("list", "(31, None)")
+                .entry("list", format!("({}, None)", idx('-')).as_str())
                 .build()
         )?;
 
@@ -680,8 +784,8 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             &mut file,
             "static VALUES_UNDEFINED: SubValuesMap = \n{};\n\n",
             phf_codegen::OrderedMap::new()
-                .entry("list", "(31, None)")
-                .entry("undefined", "(63, None)")
+                .entry("undefined", format!("({}, None)", idx('_')).as_str())
+                .entry("list", format!("({}, None)", idx('-')).as_str())
                 .build()
         )?;
 

@@ -8,4 +8,3 @@ publish = false
 [dependencies]
 rand = "0.8"
 cde = { path = "../../core/lib" }
-cde_codegen = { path = "../../core/codegen" }
