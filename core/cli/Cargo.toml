@@ -1,6 +1,6 @@
 [package]
 name = "cde_cli"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Dave Huseby <dave@cryptid.tech>"]
 description = "A CLI utility for encoding/decoding using CDE"
 documentation = "https://docs.rs/cde"

@@ -42,7 +42,7 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "cde"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "data-encoding",
@@ -55,7 +55,7 @@ dependencies = [
 
 [[package]]
 name = "cde_cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "anyhow",
  "cde",

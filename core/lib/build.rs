@@ -178,29 +178,40 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             phf_codegen::OrderedMap::new()
                 .entry(idx('_'), "(\"undefined\", None)")
                 .entry(idx('-'), "(\"list\", None)")
-                .entry(idx('a'), "(\"ad\", None)")
+                .entry(idx('a'), "(\"ad\",  Some(&NAMES_STROBE_AD))")
                 .entry(idx('c'), "(\"clr\", Some(&NAMES_STROBE_CLR))")
                 .entry(idx('e'), "(\"enc\", Some(&NAMES_STROBE_ENC))")
-                .entry(idx('k'), "(\"key\", None)")
+                .entry(idx('k'), "(\"key\", Some(&NAMES_STROBE_KEY))")
                 .entry(idx('m'), "(\"mac\", Some(&NAMES_STROBE_MAC))")
-                .entry(idx('p'), "(\"prf\", None)")
-                .entry(idx('r'), "(\"ratchet\", None)")
-                .entry(idx('A'), "(\"Ad\", None)")
+                .entry(idx('p'), "(\"prf\", Some(&NAMES_STROBE_PRF))")
+                .entry(idx('r'), "(\"ratchet\", Some(&NAMES_STROBE_RATCHET))")
+                .entry(idx('A'), "(\"Ad\",  Some(&NAMES_STROBE_AD))")
                 .entry(idx('C'), "(\"Clr\", Some(&NAMES_STROBE_CLR))")
                 .entry(idx('E'), "(\"Enc\", Some(&NAMES_STROBE_ENC))")
-                .entry(idx('K'), "(\"Key\", None)")
+                .entry(idx('K'), "(\"Key\", Some(&NAMES_STROBE_KEY))")
                 .entry(idx('M'), "(\"Mac\", Some(&NAMES_STROBE_MAC))")
-                .entry(idx('P'), "(\"Prf\", None)")
-                .entry(idx('R'), "(\"Ratchet\", None)")
+                .entry(idx('P'), "(\"Prf\", Some(&NAMES_STROBE_PRF))")
+                .entry(idx('R'), "(\"Ratchet\", Some(&NAMES_STROBE_RATCHET))")
                 .build()
         )?;
 
             writeln!(
                 &mut file,
+                "static NAMES_STROBE_AD: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"data\"")
+                    .entry(2, "\"meta\"")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
                 "static NAMES_STROBE_CLR: SubSubNamesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry(1, "\"send\"")
-                    .entry(2, "\"recv\"")
+                    .entry(1, "\"data_send\"")
+                    .entry(2, "\"data_recv\"")
+                    .entry(3, "\"meta_send\"")
+                    .entry(4, "\"meta_recv\"")
                     .build()
             )?;
 
@@ -208,8 +219,19 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 &mut file,
                 "static NAMES_STROBE_ENC: SubSubNamesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry(1, "\"send\"")
-                    .entry(2, "\"recv\"")
+                    .entry(1, "\"data_send\"")
+                    .entry(2, "\"data_recv\"")
+                    .entry(3, "\"meta_send\"")
+                    .entry(4, "\"meta_recv\"")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static NAMES_STROBE_KEY: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"data\"")
+                    .entry(2, "\"meta\"")
                     .build()
             )?;
 
@@ -217,8 +239,28 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 &mut file,
                 "static NAMES_STROBE_MAC: SubSubNamesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry(1, "\"send\"")
-                    .entry(2, "\"recv\"")
+                    .entry(1, "\"data_send\"")
+                    .entry(2, "\"data_recv\"")
+                    .entry(3, "\"meta_send\"")
+                    .entry(4, "\"meta_recv\"")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static NAMES_STROBE_PRF: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"data\"")
+                    .entry(2, "\"meta\"")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static NAMES_STROBE_RATCHET: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"data\"")
+                    .entry(2, "\"meta\"")
                     .build()
             )?;
 
@@ -564,29 +606,40 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             phf_codegen::OrderedMap::new()
                 .entry("undefined", format!("({}, None)", idx('_')).as_str())
                 .entry("list", format!("({}, None)", idx('-')).as_str())
-                .entry("ad", format!("({}, None)", idx('a')).as_str())
+                .entry("ad", format!("({},  Some(&VALUES_STROBE_AD))", idx('a')).as_str())
                 .entry("clr", format!("({}, Some(&VALUES_STROBE_CLR))", idx('c')).as_str())
                 .entry("enc", format!("({}, Some(&VALUES_STROBE_ENC))", idx('e')).as_str())
-                .entry("key", format!("({}, None)", idx('k')).as_str())
+                .entry("key", format!("({}, Some(&VALUES_STROBE_KEY))", idx('k')).as_str())
                 .entry("mac", format!("({}, Some(&VALUES_STROBE_MAC))", idx('m')).as_str())
-                .entry("prf", format!("({}, None)", idx('p')).as_str())
-                .entry("ratchet", format!("({}, None)", idx('r')).as_str())
-                .entry("Ad", format!("({}, None)", idx('A')).as_str())
+                .entry("prf", format!("({}, Some(&VALUES_STROBE_PRF))", idx('p')).as_str())
+                .entry("ratchet", format!("({}, Some(&VALUES_STROBE_RATCHET))", idx('r')).as_str())
+                .entry("Ad", format!("({},  Some(&VALUES_STROBE_AD))", idx('A')).as_str())
                 .entry("Clr", format!("({}, Some(&VALUES_STROBE_CLR))", idx('C')).as_str())
                 .entry("Enc", format!("({}, Some(&VALUES_STROBE_ENC))", idx('E')).as_str())
-                .entry("Key", format!("({}, None)", idx('K')).as_str())
+                .entry("Key", format!("({}, Some(&VALUES_STROBE_KEY))", idx('K')).as_str())
                 .entry("Mac", format!("({}, Some(&VALUES_STROBE_MAC))", idx('M')).as_str())
-                .entry("Prf", format!("({}, None)", idx('P')).as_str())
-                .entry("Ratchet", format!("({}, None)", idx('R')).as_str())
+                .entry("Prf", format!("({}, Some(&VALUES_STROBE_PRF))", idx('P')).as_str())
+                .entry("Ratchet", format!("({}, Some(&VALUES_STROBE_RATCHET))", idx('R')).as_str())
                 .build()
         )?;
 
             writeln!(
                 &mut file,
+                "static VALUES_STROBE_AD: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("data", "1")
+                    .entry("meta", "2")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
                 "static VALUES_STROBE_CLR: SubSubValuesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry("send", "1")
-                    .entry("recv", "2")
+                    .entry("data_send", "1")
+                    .entry("data_recv", "2")
+                    .entry("meta_send", "3")
+                    .entry("meta_recv", "4")
                     .build()
             )?;
 
@@ -594,8 +647,19 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 &mut file,
                 "static VALUES_STROBE_ENC: SubSubValuesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry("send", "1")
-                    .entry("recv", "2")
+                    .entry("data_send", "1")
+                    .entry("data_recv", "2")
+                    .entry("meta_send", "3")
+                    .entry("meta_recv", "4")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static VALUES_STROBE_KEY: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("data", "1")
+                    .entry("meta", "2")
                     .build()
             )?;
 
@@ -603,8 +667,28 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 &mut file,
                 "static VALUES_STROBE_MAC: SubSubValuesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry("send", "1")
-                    .entry("recv", "2")
+                    .entry("data_send", "1")
+                    .entry("data_recv", "2")
+                    .entry("meta_send", "3")
+                    .entry("meta_recv", "4")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static VALUES_STROBE_PRF: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("data", "1")
+                    .entry("meta", "2")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static VALUES_STROBE_RATCHET: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("data", "1")
+                    .entry("meta", "2")
                     .build()
             )?;
 
