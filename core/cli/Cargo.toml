@@ -10,7 +10,7 @@ license = "Apache-2.0"
 edition = "2018"
 
 [dependencies]
-cde = { version="0.3.1", path = "../lib" }
+cde = { version="0.3", path = "../lib" }
 anyhow = "1.0"
 log = "0.4"
 stderrlog = "0.5"

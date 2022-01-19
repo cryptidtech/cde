@@ -300,16 +300,18 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 .entry(idx('b'), "(\"bls12381\", Some(&NAMES_KEY_BLS12381))")
                 .entry(idx('k'), "(\"k256\", Some(&NAMES_KEY_K256))")
                 .entry(idx('p'), "(\"p256\", Some(&NAMES_KEY_P256))")
-                .entry(idx('c'), "(\"chacha20\", None)")
                 .entry(idx('a'), "(\"aes\", Some(&NAMES_KEY_AES))")
+                .entry(idx('c'), "(\"chacha20\", None)")
+                .entry(idx('d'), "(\"diffie-hellman\", None)")
                 .entry(idx('E'), "(\"Ed25519\", Some(&NAMES_KEY_ED25519))")
                 .entry(idx('X'), "(\"X25519\", Some(&NAMES_KEY_X25519))")
                 .entry(idx('R'), "(\"Rsa\", Some(&NAMES_KEY_RSA))")
                 .entry(idx('B'), "(\"Bls12381\", Some(&NAMES_KEY_BLS12381))")
                 .entry(idx('K'), "(\"K256\", Some(&NAMES_KEY_K256))")
                 .entry(idx('P'), "(\"P256\", Some(&NAMES_KEY_P256))")
-                .entry(idx('C'), "(\"Chacha20\", None)")
                 .entry(idx('A'), "(\"Aes\", Some(&NAMES_KEY_AES))")
+                .entry(idx('C'), "(\"Chacha20\", None)")
+                .entry(idx('D'), "(\"diffie-hellman\", None)")
                 .build()
         )?;
 
@@ -355,6 +357,8 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 phf_codegen::OrderedMap::new()
                     .entry(1, "\"public\"")
                     .entry(2, "\"secret\"")
+                    .entry(3, "\"verifying\"")
+                    .entry(4, "\"signing\"")
                     .build()
             )?;
 
@@ -364,6 +368,8 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 phf_codegen::OrderedMap::new()
                     .entry(1, "\"public\"")
                     .entry(2, "\"secret\"")
+                    .entry(3, "\"verifying\"")
+                    .entry(4, "\"signing\"")
                     .build()
             )?;
 
@@ -727,16 +733,18 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 .entry("bls12381", format!("({}, Some(&VALUES_KEY_BLS12381))", idx('b')).as_str())
                 .entry("k256", format!("({}, Some(&VALUES_KEY_K256))", idx('k')).as_str())
                 .entry("p256", format!("({}, Some(&VALUES_KEY_P256))", idx('p')).as_str())
-                .entry("xchacha20", format!("({}, None)", idx('c')).as_str())
                 .entry("aes", format!("({}, Some(&VALUES_KEY_AES))", idx('a')).as_str())
+                .entry("chacha20", format!("({}, None)", idx('c')).as_str())
+                .entry("diffie-hellman", format!("({}, None)", idx('d')).as_str())
                 .entry("Ed25519", format!("({}, Some(&VALUES_KEY_ED25519))", idx('E')).as_str())
                 .entry("X25519", format!("({}, Some(&VALUES_KEY_X25519))", idx('X')).as_str())
                 .entry("Rsa", format!("({}, Some(&VALUES_KEY_RSA))", idx('R')).as_str())
                 .entry("Bls12381", format!("({}, Some(&VALUES_KEY_BLS12381))", idx('B')).as_str())
                 .entry("K256", format!("({}, Some(&VALUES_KEY_K256))", idx('K')).as_str())
                 .entry("P256", format!("({}, Some(&VALUES_KEY_P256))", idx('P')).as_str())
-                .entry("Xchacha20", format!("({}, None)", idx('C')).as_str())
                 .entry("Aes", format!("({}, Some(&VALUES_KEY_AES))", idx('A')).as_str())
+                .entry("Chacha20", format!("({}, None)", idx('C')).as_str())
+                .entry("Diffie-Hellman", format!("({}, None)", idx('D')).as_str())
                 .build()
         )?;
 
@@ -782,6 +790,8 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 phf_codegen::OrderedMap::new()
                     .entry("public", "1")
                     .entry("secret", "2")
+                    .entry("verifying", "3")
+                    .entry("signing", "4")
                     .build()
             )?;
 
@@ -791,6 +801,8 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
                 phf_codegen::OrderedMap::new()
                     .entry("public", "1")
                     .entry("secret", "2")
+                    .entry("verifying", "3")
+                    .entry("signing", "4")
                     .build()
             )?;
 
