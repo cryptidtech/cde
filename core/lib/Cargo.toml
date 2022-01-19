@@ -1,6 +1,6 @@
 [package]
 name = "cde"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Dave Huseby <dave@cryptid.tech>"]
 description = "A universal encoding scheme for all cryptographic data"
 documentation = "https://docs.rs/cde"

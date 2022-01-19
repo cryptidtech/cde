@@ -294,57 +294,49 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             phf_codegen::OrderedMap::new()
                 .entry(idx('_'), "(\"undefined\", None)")
                 .entry(idx('-'), "(\"list\", None)")
-                .entry(idx('e'), "(\"ed25519\", Some(&NAMES_KEY_ED25519))")
-                .entry(idx('x'), "(\"x25519\", Some(&NAMES_KEY_X25519))")
-                .entry(idx('r'), "(\"rsa\", Some(&NAMES_KEY_RSA))")
+                .entry(idx('a'), "(\"aes\", Some(&NAMES_KEY_AES))")
                 .entry(idx('b'), "(\"bls12381\", Some(&NAMES_KEY_BLS12381))")
+                .entry(idx('c'), "(\"chacha20\", None)")
+                .entry(idx('e'), "(\"ed25519\", Some(&NAMES_KEY_ED25519))")
                 .entry(idx('k'), "(\"k256\", Some(&NAMES_KEY_K256))")
                 .entry(idx('p'), "(\"p256\", Some(&NAMES_KEY_P256))")
-                .entry(idx('a'), "(\"aes\", Some(&NAMES_KEY_AES))")
-                .entry(idx('c'), "(\"chacha20\", None)")
-                .entry(idx('d'), "(\"diffie-hellman\", None)")
-                .entry(idx('E'), "(\"Ed25519\", Some(&NAMES_KEY_ED25519))")
-                .entry(idx('X'), "(\"X25519\", Some(&NAMES_KEY_X25519))")
-                .entry(idx('R'), "(\"Rsa\", Some(&NAMES_KEY_RSA))")
+                .entry(idx('r'), "(\"rsa\", Some(&NAMES_KEY_RSA))")
+                .entry(idx('s'), "(\"shared-secret\", Some(&NAMES_KEY_SHARED))")
+                .entry(idx('x'), "(\"x25519\", Some(&NAMES_KEY_X25519))")
+
+                .entry(idx('A'), "(\"Aes\", Some(&NAMES_KEY_AES))")
                 .entry(idx('B'), "(\"Bls12381\", Some(&NAMES_KEY_BLS12381))")
+                .entry(idx('C'), "(\"Chacha20\", None)")
+                .entry(idx('E'), "(\"Ed25519\", Some(&NAMES_KEY_ED25519))")
                 .entry(idx('K'), "(\"K256\", Some(&NAMES_KEY_K256))")
                 .entry(idx('P'), "(\"P256\", Some(&NAMES_KEY_P256))")
-                .entry(idx('A'), "(\"Aes\", Some(&NAMES_KEY_AES))")
-                .entry(idx('C'), "(\"Chacha20\", None)")
-                .entry(idx('D'), "(\"diffie-hellman\", None)")
+                .entry(idx('R'), "(\"Rsa\", Some(&NAMES_KEY_RSA))")
+                .entry(idx('S'), "(\"shared-secret\", Some(&NAMES_KEY_SHARED))")
+                .entry(idx('X'), "(\"X25519\", Some(&NAMES_KEY_X25519))")
                 .build()
         )?;
 
             writeln!(
                 &mut file,
-                "static NAMES_KEY_ED25519: SubSubNamesMap = \n{};\n\n",
+                "static NAMES_KEY_AES: SubSubNamesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry(1, "\"public\"")
-                    .entry(2, "\"secret\"")
-                    .build()
-            )?;
-
-            writeln!(
-                &mut file,
-                "static NAMES_KEY_X25519: SubSubNamesMap = \n{};\n\n",
-                phf_codegen::OrderedMap::new()
-                    .entry(1, "\"public\"")
-                    .entry(2, "\"secret\"")
-                    .build()
-            )?;
-
-            writeln!(
-                &mut file,
-                "static NAMES_KEY_RSA: SubSubNamesMap = \n{};\n\n",
-                phf_codegen::OrderedMap::new()
-                    .entry(1, "\"public\"")
-                    .entry(2, "\"secret\"")
+                    .entry(1, "\"128\"")
+                    .entry(2, "\"256\"")
                     .build()
             )?;
 
             writeln!(
                 &mut file,
                 "static NAMES_KEY_BLS12381: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"public\"")
+                    .entry(2, "\"secret\"")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static NAMES_KEY_ED25519: SubSubNamesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
                     .entry(1, "\"public\"")
                     .entry(2, "\"secret\"")
@@ -375,10 +367,29 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
 
             writeln!(
                 &mut file,
-                "static NAMES_KEY_AES: SubSubNamesMap = \n{};\n\n",
+                "static NAMES_KEY_RSA: SubSubNamesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry(1, "\"128\"")
-                    .entry(2, "\"256\"")
+                    .entry(1, "\"public\"")
+                    .entry(2, "\"secret\"")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static NAMES_KEY_SHARED: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"psk\"")
+                    .entry(2, "\"pkdh\"")
+                    .entry(3, "\"ecdh\"")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static NAMES_KEY_X25519: SubSubNamesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry(1, "\"public\"")
+                    .entry(2, "\"secret\"")
                     .build()
             )?;
 
@@ -727,57 +738,48 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
             phf_codegen::OrderedMap::new()
                 .entry("undefined", format!("({}, None)", idx('_')).as_str())
                 .entry("list", format!("({}, None)", idx('-')).as_str())
-                .entry("ed25519", format!("({}, Some(&VALUES_KEY_ED25519))", idx('e')).as_str())
-                .entry("x25519", format!("({}, Some(&VALUES_KEY_X25519))", idx('x')).as_str())
-                .entry("rsa", format!("({}, Some(&VALUES_KEY_RSA))", idx('r')).as_str())
+                .entry("aes", format!("({}, Some(&VALUES_KEY_AES))", idx('a')).as_str())
                 .entry("bls12381", format!("({}, Some(&VALUES_KEY_BLS12381))", idx('b')).as_str())
+                .entry("chacha20", format!("({}, None)", idx('c')).as_str())
+                .entry("ed25519", format!("({}, Some(&VALUES_KEY_ED25519))", idx('e')).as_str())
                 .entry("k256", format!("({}, Some(&VALUES_KEY_K256))", idx('k')).as_str())
                 .entry("p256", format!("({}, Some(&VALUES_KEY_P256))", idx('p')).as_str())
-                .entry("aes", format!("({}, Some(&VALUES_KEY_AES))", idx('a')).as_str())
-                .entry("chacha20", format!("({}, None)", idx('c')).as_str())
-                .entry("diffie-hellman", format!("({}, None)", idx('d')).as_str())
-                .entry("Ed25519", format!("({}, Some(&VALUES_KEY_ED25519))", idx('E')).as_str())
-                .entry("X25519", format!("({}, Some(&VALUES_KEY_X25519))", idx('X')).as_str())
-                .entry("Rsa", format!("({}, Some(&VALUES_KEY_RSA))", idx('R')).as_str())
+                .entry("rsa", format!("({}, Some(&VALUES_KEY_RSA))", idx('r')).as_str())
+                .entry("shared-secret", format!("({}, Some(&VALUES_KEY_SHARED))", idx('s')).as_str())
+                .entry("x25519", format!("({}, Some(&VALUES_KEY_X25519))", idx('x')).as_str())
+                .entry("Aes", format!("({}, Some(&VALUES_KEY_AES))", idx('A')).as_str())
                 .entry("Bls12381", format!("({}, Some(&VALUES_KEY_BLS12381))", idx('B')).as_str())
+                .entry("Chacha20", format!("({}, None)", idx('C')).as_str())
+                .entry("Ed25519", format!("({}, Some(&VALUES_KEY_ED25519))", idx('E')).as_str())
                 .entry("K256", format!("({}, Some(&VALUES_KEY_K256))", idx('K')).as_str())
                 .entry("P256", format!("({}, Some(&VALUES_KEY_P256))", idx('P')).as_str())
-                .entry("Aes", format!("({}, Some(&VALUES_KEY_AES))", idx('A')).as_str())
-                .entry("Chacha20", format!("({}, None)", idx('C')).as_str())
-                .entry("Diffie-Hellman", format!("({}, None)", idx('D')).as_str())
+                .entry("Rsa", format!("({}, Some(&VALUES_KEY_RSA))", idx('R')).as_str())
+                .entry("Shared-Secret", format!("({}, Some(&VALUES_KEY_SHARED))", idx('S')).as_str())
+                .entry("X25519", format!("({}, Some(&VALUES_KEY_X25519))", idx('X')).as_str())
                 .build()
         )?;
 
             writeln!(
                 &mut file,
-                "static VALUES_KEY_ED25519: SubSubValuesMap = \n{};\n\n",
+                "static VALUES_KEY_AES: SubSubValuesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry("public", "1")
-                    .entry("secret", "2")
-                    .build()
-            )?;
-
-            writeln!(
-                &mut file,
-                "static VALUES_KEY_X25519: SubSubValuesMap = \n{};\n\n",
-                phf_codegen::OrderedMap::new()
-                    .entry("public", "1")
-                    .entry("secret", "2")
-                    .build()
-            )?;
-
-            writeln!(
-                &mut file,
-                "static VALUES_KEY_RSA: SubSubValuesMap = \n{};\n\n",
-                phf_codegen::OrderedMap::new()
-                    .entry("public", "1")
-                    .entry("secret", "2")
+                    .entry("128", "1")
+                    .entry("256", "2")
                     .build()
             )?;
 
             writeln!(
                 &mut file,
                 "static VALUES_KEY_BLS12381: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("public", "1")
+                    .entry("secret", "2")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static VALUES_KEY_ED25519: SubSubValuesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
                     .entry("public", "1")
                     .entry("secret", "2")
@@ -808,10 +810,29 @@ fn main() -> Result<(), Box<(dyn Error + 'static)>> {
 
             writeln!(
                 &mut file,
-                "static VALUES_KEY_AES: SubSubValuesMap = \n{};\n\n",
+                "static VALUES_KEY_RSA: SubSubValuesMap = \n{};\n\n",
                 phf_codegen::OrderedMap::new()
-                    .entry("128", "1")
-                    .entry("256", "2")
+                    .entry("public", "1")
+                    .entry("secret", "2")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static VALUES_KEY_SHARED: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("psk", "1")
+                    .entry("pkdh", "2")
+                    .entry("ecdh", "3")
+                    .build()
+            )?;
+
+            writeln!(
+                &mut file,
+                "static VALUES_KEY_X25519: SubSubValuesMap = \n{};\n\n",
+                phf_codegen::OrderedMap::new()
+                    .entry("public", "1")
+                    .entry("secret", "2")
                     .build()
             )?;
 
