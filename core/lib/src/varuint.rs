@@ -1,7 +1,7 @@
 use core::{convert::{From, Into}, fmt, ops::{Deref, DerefMut}};
 use crate::{CryptoData, ENCODER};
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub struct VarUInt(u64);
 
 impl<'a> From<&'a [u8]> for VarUInt {

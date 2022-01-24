@@ -7,7 +7,7 @@ include!(concat!(env!("OUT_DIR"), "/hashmaps.rs"));
 static NUMBERS: &'static str = "0123456789";
 static UNDEFINED: &'static str = "undefined";
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub struct Tag {
     b: [u8; 2],
     l: VarUInt,
