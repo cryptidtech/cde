@@ -30,6 +30,18 @@ impl Into<u64> for VarUInt {
     }
 }
 
+impl From<usize> for VarUInt {
+    fn from(v: usize) -> VarUInt {
+        VarUInt(v as u64)
+    }
+}
+
+impl Into<usize> for VarUInt {
+    fn into(self) -> usize {
+        self.0 as usize
+    }
+}
+
 impl fmt::Display for VarUInt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)

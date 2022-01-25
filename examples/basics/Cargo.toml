@@ -4,6 +4,7 @@ version = "0.0.0"
 workspace = "../"
 edition = "2018"
 publish = false
+rust-version = "1.58.1"
 
 [dependencies]
 rand = "0.8"

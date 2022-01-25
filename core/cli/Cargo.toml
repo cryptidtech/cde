@@ -8,6 +8,7 @@ repository = "https://github.com/cryptidtech/cde"
 readme = "../../README.md"
 license = "Apache-2.0"
 edition = "2018"
+rust-version = "1.58.1"
 
 [dependencies]
 cde = { version="0.3", path = "../lib" }

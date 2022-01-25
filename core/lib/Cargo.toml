@@ -1,6 +1,6 @@
 [package]
 name = "cde"
-version = "0.3.4"
+version = "0.3.5"
 authors = ["Dave Huseby <dave@cryptid.tech>"]
 description = "A universal encoding scheme for all cryptographic data"
 documentation = "https://docs.rs/cde"
@@ -9,6 +9,7 @@ readme = "../../README.md"
 license = "Apache-2.0"
 edition = "2018"
 keywords = ["no_std", "cryptography", "encoding"]
+rust-version = "1.58.1"
 
 [features]
 alloc = [

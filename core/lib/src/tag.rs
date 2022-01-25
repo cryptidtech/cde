@@ -22,11 +22,11 @@ impl Tag {
         t
     }
 
-    pub fn set_data_length(&mut self, len: u64) {
+    pub fn set_data_length(&mut self, len: usize) {
         self.l = VarUInt::from(len);
     }
 
-    pub fn get_data_length(&self) -> u64 {
+    pub fn get_data_length(&self) -> usize {
         self.l.into()
     }
 

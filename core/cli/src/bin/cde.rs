@@ -169,7 +169,7 @@ fn main() -> Result<()> {
             debug!("\n{:?}", tt);
 
             // set the data length on the tag
-            tt.set_data_length(len as u64);
+            tt.set_data_length(len);
 
             // write the encoded type tag
             let mut b = [0u8; 12];
