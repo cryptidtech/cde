@@ -1,5 +1,9 @@
-use core::{convert::{From, Into}, fmt, ops::{Deref, DerefMut}};
-use crate::{CryptoData, ENCODER};
+use crate::{CryptoData, Error, ENCODER};
+use core::{
+    convert::{From, Into},
+    fmt,
+    ops::{Deref, DerefMut},
+};
 
 #[derive(Clone, Copy, Default, PartialEq)]
 pub struct VarUInt(u64);
@@ -15,6 +19,27 @@ impl<'a> From<&'a [u8]> for VarUInt {
             }
         }
         VarUInt(v)
+    }
+}
+
+impl VarUInt {
+    pub fn try_parse(buf: &[u8]) -> Result<Self, Error> {
+        let mut complete = false;
+        let mut v = 0u64;
+        for (i, b) in buf.iter().cloned().enumerate() {
+            let k = u64::from(b & 0x7f);
+            v |= k << (i * 7);
+            if b & 0x80 == 0 {
+                complete = true;
+                break;
+            }
+        }
+
+        if complete {
+            return Ok(VarUInt(v));
+        } else {
+            return Err(Error::InvalidLength);
+        }
     }
 }
 
@@ -68,7 +93,7 @@ impl CryptoData for VarUInt {
             n if n < 128 => 1,
             n if n >= 128 && n < 268_435_456 => 4,
             n if n >= 268_435_456 && n < 562_949_953_421_311 => 7,
-            _ => 7
+            _ => 7,
         }
     }
 
@@ -90,11 +115,9 @@ impl CryptoData for VarUInt {
     }
 
     fn encode(&self, buf: &mut [u8]) -> usize {
-        let mut b = [0u8;7];
+        let mut b = [0u8; 7];
         self.bytes(&mut b);
         ENCODER.encode_mut(&b[0..self.len()], buf);
         self.encode_len()
     }
 }
-
-

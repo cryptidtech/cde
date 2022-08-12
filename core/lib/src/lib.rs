@@ -32,11 +32,14 @@ pub enum Error {
     MissingBuf,
     #[error("decode error")]
     DecodeError,
+    #[error("invalid length")]
+    InvalidLength,
 }
 
 pub type Result<T> = anyhow::Result<T, Error>;
 
-pub static CDE_ALPHABET: &'static str = "abcdefghijklmnopqrstuvwxyz01234-ABCDEFGHIJKLMNOPQRSTUVWXYZ56789_";
+pub static CDE_ALPHABET: &'static str =
+    "abcdefghijklmnopqrstuvwxyz01234-ABCDEFGHIJKLMNOPQRSTUVWXYZ56789_";
 pub static ENCODER: Encoding = data_encoding_macro::new_encoding! {
     symbols: "abcdefghijklmnopqrstuvwxyz01234-ABCDEFGHIJKLMNOPQRSTUVWXYZ56789_",
 };
@@ -57,9 +60,16 @@ pub fn ch(i: u8) -> char {
     }
 }
 
-pub fn decode_tag_and_data<'a, T: From<&'a [u8]>>(encoded: &[u8], buf: &'a mut [u8]) -> Result<(Tag, T)> {
-    let len = ENCODER.decode_len(encoded.len()).map_err(|_| Error::DecodeError)?;
-    ENCODER.decode_mut(encoded, &mut buf[0..len]).map_err(|_| Error::DecodeError)?;
+pub fn decode_tag_and_data<'a, T: From<&'a [u8]>>(
+    encoded: &[u8],
+    buf: &'a mut [u8],
+) -> Result<(Tag, T)> {
+    let len = ENCODER
+        .decode_len(encoded.len())
+        .map_err(|_| Error::DecodeError)?;
+    ENCODER
+        .decode_mut(encoded, &mut buf[0..len])
+        .map_err(|_| Error::DecodeError)?;
     let tag = TagBuilder::from_bytes(&buf).build()?;
     let len = tag.len();
     let data_len = tag.get_data_length();
@@ -67,7 +77,11 @@ pub fn decode_tag_and_data<'a, T: From<&'a [u8]>>(encoded: &[u8], buf: &'a mut [
     Ok((tag, data))
 }
 
-pub fn encode_tag_and_data<'a>(tag: &mut Tag, data: &impl CryptoData, buf: &'a mut [u8]) -> Result<usize> {
+pub fn encode_tag_and_data<'a>(
+    tag: &mut Tag,
+    data: &impl CryptoData,
+    buf: &'a mut [u8],
+) -> Result<usize> {
     tag.set_data_length(data.len());
     let tagsize = tag.encode(buf);
     let datasize = data.encode(&mut buf[tagsize..]);
